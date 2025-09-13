@@ -68,9 +68,29 @@ class GameStateManager {
       console.log("[v0] Transaction successful:", result)
       
       // Extract treasury object ID from transaction result
-      const treasuryObject = result.objectChanges?.find(
-        (change: any) => change.type === "created" && change.objectType.includes("Treasury"),
-      )
+      // Try multiple approaches to find the treasury object
+      let treasuryObject = null
+      
+      if (result.objectChanges) {
+        // First try: look for Treasury type
+        treasuryObject = result.objectChanges.find(
+          (change: any) => change.type === "created" && change.objectType && 
+          (change.objectType.includes("Treasury") || change.objectType.includes("treasury"))
+        )
+        
+        // Second try: look for any created object that might be the treasury
+        if (!treasuryObject) {
+          treasuryObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectId
+          )
+        }
+      }
+      
+      // Log detailed transaction result for debugging
+      console.log("[v0] Transaction result details:")
+      console.log("- digest:", result.digest)
+      console.log("- objectChanges:", JSON.stringify(result.objectChanges, null, 2))
+      console.log("- extracted treasuryObject:", treasuryObject)
 
       const room: GameRoom = {
         id: roomId,
@@ -88,6 +108,12 @@ class GameStateManager {
       this.rooms.set(roomId, room)
       this.saveRoomsToStorage()
       this.notifyListeners(roomId, room)
+
+      if (!treasuryObject?.objectId) {
+        console.warn("[v0] Warning: Treasury object ID not found in transaction result. Room created but may have issues with betting.")
+        console.warn("[v0] This could be due to smart contract returning different object types than expected.")
+        console.warn("[v0] Room will be created but treasury functionality may be limited.")
+      }
 
       console.log("[v0] Room created successfully with treasury:", treasuryObject?.objectId)
       return room
@@ -168,21 +194,54 @@ class GameStateManager {
     }
     
     const effectiveTreasuryId = treasuryId || room.treasuryId
-    if (!effectiveTreasuryId) {
-      throw new Error(`Room ${roomId} is missing treasury information. Cannot process bet.`)
+    
+    // If no treasury ID is available, try to retrieve it from the transaction digest
+    if (!effectiveTreasuryId && room?.transactionDigest) {
+      console.log("[v0] Treasury ID missing, attempting to retrieve from transaction digest:", room.transactionDigest)
+      try {
+        const retrievedTreasuryId = await suiContract.getTreasuryFromTransaction(room.transactionDigest)
+        if (retrievedTreasuryId) {
+          console.log("[v0] Successfully retrieved treasury ID from transaction:", retrievedTreasuryId)
+          room.treasuryId = retrievedTreasuryId
+          this.rooms.set(roomId, room)
+          this.saveRoomsToStorage()
+          return this.joinRoom(roomId, playerAddress, signAndExecute, retrievedTreasuryId)
+        }
+      } catch (error) {
+        console.error("[v0] Failed to retrieve treasury ID from transaction:", error)
+      }
+    }
+    
+    // Final check for treasury ID
+    const finalTreasuryId = treasuryId || room.treasuryId
+    if (!finalTreasuryId) {
+      console.error("[v0] Missing treasury information for room:", {
+        roomId: roomId,
+        localRoom: !!room,
+        providedTreasuryId: !!treasuryId,
+        roomTreasuryId: room?.treasuryId,
+        roomCreatedAt: room?.createdAt,
+        roomTransactionDigest: room?.transactionDigest
+      })
+      
+      if (room?.transactionDigest) {
+        throw new Error(`Room ${roomId} was created but treasury information is missing. Transaction digest: ${room.transactionDigest}. Please use the share link provided by the room creator or contact them for the treasury ID.`)
+      }
+      
+      throw new Error(`Room ${roomId} is missing treasury information. Cannot process bet. Please use the share link provided by the room creator.`)
     }
 
-    console.log("[v0] Joining room with modern SUI transaction, treasury:", effectiveTreasuryId)
+    console.log("[v0] Joining room with modern SUI transaction, treasury:", finalTreasuryId)
 
     try {
       // Execute blockchain transaction to join the betting room
-      const result = await suiContract.joinBettingRoom(effectiveTreasuryId!, room.betAmount, signAndExecute)
+      const result = await suiContract.joinBettingRoom(finalTreasuryId!, room.betAmount, signAndExecute)
       
       console.log("[v0] Join transaction successful:", result)
 
       // Update the room with the treasury ID if it wasn't set before
-      if (!room.treasuryId && effectiveTreasuryId) {
-        room.treasuryId = effectiveTreasuryId
+      if (!room.treasuryId && finalTreasuryId) {
+        room.treasuryId = finalTreasuryId
       }
 
       // Add player to room and start the game
