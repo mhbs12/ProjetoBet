@@ -1,7 +1,7 @@
 import { Transaction } from "@mysten/sui/transactions"
 import { SuiClient, getFullnodeUrl } from "@mysten/sui/client"
 
-const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as "testnet" | "mainnet") || "testnet"
+const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as "devnet" | "testnet" | "mainnet") || "devnet"
 const CONTRACT_PACKAGE_ID = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
 const DEFAULT_GAS_BUDGET = parseInt(process.env.NEXT_PUBLIC_DEFAULT_GAS_BUDGET || "10000000") // 0.01 SUI default
 
