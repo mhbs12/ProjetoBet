@@ -12,10 +12,11 @@ import { suiWallet } from "@/lib/sui-wallet"
 import { gameStateManager } from "@/lib/game-state"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useCurrentAccount } from "@mysten/dapp-kit"
 
 export default function HomePage() {
   const router = useRouter()
-  const [walletConnected, setWalletConnected] = useState(false)
+  const currentAccount = useCurrentAccount()
   const [rooms, setRooms] = useState<any[]>([])
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomBet, setNewRoomBet] = useState("0.1")
@@ -23,31 +24,19 @@ export default function HomePage() {
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [joiningRoom, setJoiningRoom] = useState(false)
 
+  // Update wallet state when account changes
   useEffect(() => {
-    const checkWallet = async () => {
-      const connectedAccount = await suiWallet.getConnectedAccount()
-      if (connectedAccount) {
-        suiWallet.setConnectionState(true, connectedAccount)
-      }
-
-      const walletState = suiWallet.getState()
-      setWalletConnected(walletState.connected)
+    if (currentAccount) {
+      console.log("[v0] Account connected:", currentAccount.address)
+      suiWallet.setConnectionState(true, currentAccount.address)
+    } else {
+      console.log("[v0] Account disconnected")
+      suiWallet.setConnectionState(false, null)
     }
-
-    checkWallet()
-    const interval = setInterval(() => {
-      const walletState = suiWallet.getState()
-      setWalletConnected(walletState.connected)
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [])
+  }, [currentAccount])
 
   const createRoom = async () => {
-    if (!newRoomName.trim() || !newRoomBet) return
-
-    const walletState = suiWallet.getState()
-    if (!walletState.connected || !walletState.address || !walletState.signAndExecuteTransactionBlock) return
+    if (!newRoomName.trim() || !newRoomBet || !currentAccount) return
 
     setCreatingRoom(true)
     try {
@@ -59,8 +48,8 @@ export default function HomePage() {
       const room = await gameStateManager.createRoom(
         roomId,
         betAmount,
-        walletState.address,
-        walletState.signAndExecuteTransactionBlock,
+        currentAccount.address,
+        suiWallet.signAndExecuteTransactionBlock.bind(suiWallet),
       )
 
       setRooms((prev) => [...prev, room])
@@ -78,10 +67,7 @@ export default function HomePage() {
   }
 
   const joinRoom = async () => {
-    if (!joinRoomId.trim()) return
-
-    const walletState = suiWallet.getState()
-    if (!walletState.connected || !walletState.address || !walletState.signAndExecuteTransactionBlock) return
+    if (!joinRoomId.trim() || !currentAccount) return
 
     setJoiningRoom(true)
     try {
@@ -89,8 +75,8 @@ export default function HomePage() {
 
       const room = await gameStateManager.joinRoom(
         joinRoomId,
-        walletState.address,
-        walletState.signAndExecuteTransactionBlock,
+        currentAccount.address,
+        suiWallet.signAndExecuteTransactionBlock.bind(suiWallet),
       )
 
       setRooms((prev) => [...prev, room])
@@ -106,7 +92,7 @@ export default function HomePage() {
     }
   }
 
-  if (!walletConnected) {
+  if (!currentAccount) {
     return (
       <main className="min-h-screen bg-background p-4">
         <div className="max-w-4xl mx-auto">
