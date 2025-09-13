@@ -130,6 +130,24 @@ class GameStateManager {
       }
     }
     
+    // If room exists locally but has no treasury info, try to use provided treasury ID
+    if (room && !room.treasuryId && treasuryId) {
+      console.log("[v0] Room exists locally but missing treasury info, validating provided treasury:", treasuryId)
+      try {
+        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
+        if (treasuryInfo) {
+          room.treasuryId = treasuryId
+          room.betAmount = treasuryInfo.betAmount
+          console.log("[v0] Updated room with treasury info:", treasuryInfo)
+        } else {
+          throw new Error(`Treasury ${treasuryId} not found or is invalid`)
+        }
+      } catch (error) {
+        console.error("[v0] Failed to validate treasury info:", error)
+        throw new Error(`Failed to validate treasury information: ${error.message}`)
+      }
+    }
+    
     // Validate room exists
     if (!room) {
       const message = treasuryId 
@@ -278,6 +296,18 @@ class GameStateManager {
     return Array.from(this.rooms.values()).filter(room => 
       room.name.toLowerCase().includes(lowerQuery) || 
       room.id.toLowerCase().includes(lowerQuery)
+    )
+  }
+
+  getRoomsByWallet(walletAddress: string): GameRoom[] {
+    return Array.from(this.rooms.values()).filter(room => 
+      room.players.includes(walletAddress)
+    )
+  }
+
+  getRoomsCreatedByWallet(walletAddress: string): GameRoom[] {
+    return Array.from(this.rooms.values()).filter(room => 
+      room.players.length > 0 && room.players[0] === walletAddress
     )
   }
 

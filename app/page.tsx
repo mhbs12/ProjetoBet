@@ -20,6 +20,7 @@ export default function HomePage() {
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
   const [rooms, setRooms] = useState<any[]>([])
   const [availableRooms, setAvailableRooms] = useState<any[]>([])
+  const [myRooms, setMyRooms] = useState<any[]>([])
   const [roomSearchQuery, setRoomSearchQuery] = useState("")
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomBet, setNewRoomBet] = useState("0.1")
@@ -47,11 +48,13 @@ export default function HomePage() {
     if (currentAccount) {
       console.log("[v0] Account connected:", currentAccount.address)
       loadAvailableRooms()
+      loadMyRooms()
     } else {
       console.log("[v0] Account disconnected")
       // Keep mock rooms for demonstration even when wallet is disconnected
       const available = gameStateManager.getAvailableRooms()
       setAvailableRooms(available)
+      setMyRooms([])
     }
   }, [currentAccount])
 
@@ -60,6 +63,15 @@ export default function HomePage() {
     const available = gameStateManager.getAvailableRooms()
     console.log("[v0] Loaded available rooms:", available)
     setAvailableRooms(available)
+  }
+
+  // Load rooms created by current wallet
+  const loadMyRooms = () => {
+    if (currentAccount) {
+      const myCreatedRooms = gameStateManager.getRoomsCreatedByWallet(currentAccount.address)
+      console.log("[v0] Loaded my rooms:", myCreatedRooms)
+      setMyRooms(myCreatedRooms)
+    }
   }
 
   // Create mock rooms for testing (TODO: Remove in production)
@@ -137,6 +149,7 @@ export default function HomePage() {
       setNewRoomName("")
       setNewRoomBet("0.1")
       loadAvailableRooms() // Refresh available rooms
+      loadMyRooms() // Refresh my rooms
 
       console.log("[v0] Room created successfully, redirecting...")
       router.push(`/game/${roomId}`)
@@ -177,6 +190,7 @@ export default function HomePage() {
       setRooms((prev) => [...prev, room])
       setJoinRoomId("")
       loadAvailableRooms() // Refresh available rooms
+      loadMyRooms() // Refresh my rooms
 
       console.log("[v0] Joined room successfully, redirecting...")
       router.push(`/game/${roomIdToJoin}${treasuryIdFromUrl ? `?treasury=${treasuryIdFromUrl}` : ''}`)
@@ -223,6 +237,7 @@ export default function HomePage() {
 
       setRooms((prev) => [...prev, joinedRoom])
       loadAvailableRooms() // Refresh available rooms
+      loadMyRooms() // Refresh my rooms
 
       console.log("[v0] Joined room successfully, redirecting...")
       router.push(`/game/${room.id}${room.treasuryId ? `?treasury=${room.treasuryId}` : ''}`)
@@ -572,6 +587,57 @@ export default function HomePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* My Rooms Section */}
+        {myRooms.length > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                My Rooms
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {myRooms.map((room) => (
+                  <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                    <div className="flex-1">
+                      <h4 className="font-semibold">{room.name}</h4>
+                      <p className="text-sm text-muted-foreground">Room ID: {room.id}</p>
+                      {room.treasuryId && (
+                        <p className="text-xs text-muted-foreground">Treasury: {room.treasuryId.slice(0, 8)}...</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline">
+                          <Coins className="w-3 h-3 mr-1" />
+                          {room.betAmount} SUI
+                        </Badge>
+                        <Badge variant={room.gameState === "playing" ? "default" : room.gameState === "waiting" ? "secondary" : "outline"}>
+                          {room.gameState === "waiting" ? "Waiting for player" : 
+                           room.gameState === "playing" ? "Game in progress" : 
+                           "Game finished"}
+                        </Badge>
+                        <Badge variant="outline">
+                          <Users className="w-3 h-3 mr-1" />
+                          {room.players.length}/2
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="ml-4">
+                      <Link href={`/game/${room.id}${room.treasuryId ? `?treasury=${room.treasuryId}` : ''}`}>
+                        <Button variant="default">
+                          {room.gameState === "waiting" ? "Enter Room" : 
+                           room.gameState === "playing" ? "Continue Game" : 
+                           "View Results"}
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {rooms.length > 0 && (
           <Card>
