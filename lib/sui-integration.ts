@@ -16,6 +16,8 @@ export class SuiGameContract {
     if (!CONTRACT_PACKAGE_ID) {
       if (typeof window !== "undefined") {
         console.error("[v0] Contract package ID not configured. Cannot execute blockchain transactions.")
+        console.error("[v0] Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID in your environment variables.")
+        console.error("[v0] Example: NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0x1234567890abcdef1234567890abcdef12345678")
       }
       return false
     }
@@ -24,10 +26,25 @@ export class SuiGameContract {
 
   async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteCallback: any) {
     if (!this.validateContract()) {
-      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID.")
+      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID environment variable.")
+    }
+
+    // Validate inputs
+    if (!walletAddress) {
+      throw new Error("Wallet address is required")
+    }
+    
+    if (betAmount <= 0) {
+      throw new Error("Bet amount must be greater than 0")
+    }
+    
+    if (betAmount < 0.001) {
+      throw new Error("Minimum bet amount is 0.001 SUI")
     }
 
     try {
+      console.log(`[v0] Creating betting room: wallet=${walletAddress}, amount=${betAmount} SUI`)
+      
       const tx = new Transaction()
       
       // Set gas budget to avoid automatic calculation issues
@@ -35,6 +52,8 @@ export class SuiGameContract {
 
       // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
       const amountInMist = BigInt(Math.floor(betAmount * 1000000000))
+      
+      console.log(`[v0] Converting ${betAmount} SUI to ${amountInMist} MIST`)
       
       // Split coins from gas to create the bet amount
       const [coin] = tx.splitCoins(tx.gas, [amountInMist])
@@ -44,6 +63,8 @@ export class SuiGameContract {
         target: `${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`,
         arguments: [coin],
       })
+
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`)
 
       // Call the callback with the transaction object for modern dapp-kit
       const transactionData = {
@@ -57,16 +78,41 @@ export class SuiGameContract {
       return signAndExecuteCallback(transactionData)
     } catch (error) {
       console.error("Error creating betting room:", error)
-      throw error
+      
+      // Provide more helpful error messages
+      let userFriendlyMessage = "Failed to create betting room"
+      
+      if (error.message.includes("Contract not configured")) {
+        userFriendlyMessage = "Smart contract not configured. Please contact the administrator."
+      } else if (error.message.includes("Insufficient")) {
+        userFriendlyMessage = "Insufficient SUI balance. Please add more SUI to your wallet."
+      } else if (error.message.includes("Gas")) {
+        userFriendlyMessage = "Transaction failed due to gas issues. Please try again with a smaller amount."
+      } else if (error.message.includes("splitCoins")) {
+        userFriendlyMessage = "Unable to prepare bet amount. Please check your wallet balance."
+      }
+      
+      throw new Error(userFriendlyMessage)
     }
   }
 
   async joinBettingRoom(treasuryId: string, betAmount: number, signAndExecuteCallback: any) {
     if (!this.validateContract()) {
-      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID.")
+      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID environment variable.")
+    }
+
+    // Validate inputs
+    if (!treasuryId) {
+      throw new Error("Treasury ID is required")
+    }
+    
+    if (betAmount <= 0) {
+      throw new Error("Bet amount must be greater than 0")
     }
 
     try {
+      console.log(`[v0] Joining betting room: treasury=${treasuryId}, amount=${betAmount} SUI`)
+      
       const tx = new Transaction()
       
       // Set gas budget to avoid automatic calculation issues
@@ -74,6 +120,8 @@ export class SuiGameContract {
 
       // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
       const amountInMist = BigInt(Math.floor(betAmount * 1000000000))
+      
+      console.log(`[v0] Converting ${betAmount} SUI to ${amountInMist} MIST`)
       
       // Split coins from gas to create the bet amount
       const [coin] = tx.splitCoins(tx.gas, [amountInMist])
@@ -83,6 +131,8 @@ export class SuiGameContract {
         target: `${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta`,
         arguments: [tx.object(treasuryId), coin],
       })
+
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta`)
 
       // Call the callback with the transaction object for modern dapp-kit
       const transactionData = {
@@ -95,7 +145,23 @@ export class SuiGameContract {
       return signAndExecuteCallback(transactionData)
     } catch (error) {
       console.error("Error joining betting room:", error)
-      throw error
+      
+      // Provide more helpful error messages
+      let userFriendlyMessage = "Failed to join betting room"
+      
+      if (error.message.includes("Contract not configured")) {
+        userFriendlyMessage = "Smart contract not configured. Please contact the administrator."
+      } else if (error.message.includes("Insufficient")) {
+        userFriendlyMessage = "Insufficient SUI balance. Please add more SUI to your wallet."
+      } else if (error.message.includes("Gas")) {
+        userFriendlyMessage = "Transaction failed due to gas issues. Please try again."
+      } else if (error.message.includes("splitCoins")) {
+        userFriendlyMessage = "Unable to prepare bet amount. Please check your wallet balance."
+      } else if (error.message.includes("object")) {
+        userFriendlyMessage = "Invalid treasury ID. The room may no longer exist."
+      }
+      
+      throw new Error(userFriendlyMessage)
     }
   }
 
