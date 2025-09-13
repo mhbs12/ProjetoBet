@@ -2,6 +2,7 @@ import { suiContract } from "./sui-integration"
 
 export interface GameRoom {
   id: string
+  name: string
   treasuryId?: string
   betAmount: number
   players: string[]
@@ -10,6 +11,7 @@ export interface GameRoom {
   currentPlayer: string
   winner?: string
   transactionDigest?: string
+  createdAt: number
 }
 
 class GameStateManager {
@@ -19,6 +21,11 @@ class GameStateManager {
 
   constructor() {
     this.loadRoomsFromStorage()
+  }
+
+  // Allow access to rooms map for testing
+  get roomsMap() {
+    return this.rooms
   }
 
   private loadRoomsFromStorage(): void {
@@ -51,7 +58,7 @@ class GameStateManager {
     }
   }
 
-  async createRoom(roomId: string, betAmount: number, creatorAddress: string, signAndExecute: any): Promise<GameRoom> {
+  async createRoom(roomId: string, roomName: string, betAmount: number, creatorAddress: string, signAndExecute: any): Promise<GameRoom> {
     console.log("[v0] Creating room with modern SUI transaction")
 
     try {
@@ -67,6 +74,7 @@ class GameStateManager {
 
       const room: GameRoom = {
         id: roomId,
+        name: roomName,
         treasuryId: treasuryObject?.objectId,
         betAmount,
         players: [creatorAddress],
@@ -74,6 +82,7 @@ class GameStateManager {
         board: Array(9).fill(null),
         currentPlayer: creatorAddress,
         transactionDigest: result.digest,
+        createdAt: Date.now(),
       }
 
       this.rooms.set(roomId, room)
@@ -102,12 +111,14 @@ class GameStateManager {
           // Create room from treasury info since it doesn't exist locally
           room = {
             id: roomId,
+            name: `Room ${roomId}`, // Default name when retrieved from treasury
             treasuryId: treasuryId,
             betAmount: treasuryInfo.betAmount,
             players: [], // We don't know the first player address without additional blockchain query
             gameState: "waiting",
             board: Array(9).fill(null),
             currentPlayer: "", // This will be set when game starts
+            createdAt: Date.now(),
           }
           console.log("[v0] Successfully created room from treasury info:", treasuryInfo)
         } else {
@@ -252,6 +263,22 @@ class GameStateManager {
 
   getRoom(roomId: string): GameRoom | undefined {
     return this.rooms.get(roomId)
+  }
+
+  getAllRooms(): GameRoom[] {
+    return Array.from(this.rooms.values())
+  }
+
+  getAvailableRooms(): GameRoom[] {
+    return Array.from(this.rooms.values()).filter(room => room.gameState === "waiting")
+  }
+
+  searchRooms(query: string): GameRoom[] {
+    const lowerQuery = query.toLowerCase()
+    return Array.from(this.rooms.values()).filter(room => 
+      room.name.toLowerCase().includes(lowerQuery) || 
+      room.id.toLowerCase().includes(lowerQuery)
+    )
   }
 
   subscribeToRoom(roomId: string, callback: (room: GameRoom) => void): () => void {
