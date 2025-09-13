@@ -78,7 +78,24 @@ export default function GamePage() {
       setPlayerSymbol("O")
     } catch (error) {
       console.error("[v0] Failed to auto-join room:", error)
-      alert(`Failed to join room: ${error.message}`)
+      
+      // Provide more user-friendly error messages
+      let userMessage = "Failed to join room"
+      if (error.message.includes("not found")) {
+        userMessage = "Room not found. The room may have expired or the link is invalid."
+      } else if (error.message.includes("full")) {
+        userMessage = "This room is already full. Please try joining a different room."
+      } else if (error.message.includes("already in room")) {
+        userMessage = "You are already in this room."
+      } else if (error.message.includes("Treasury")) {
+        userMessage = "Unable to access room treasury. The room may be invalid or expired."
+      } else if (error.message.includes("Transaction failed")) {
+        userMessage = "Transaction failed. Please check your wallet connection and try again."
+      } else {
+        userMessage = `Failed to join room: ${error.message}`
+      }
+      
+      alert(userMessage)
       router.push("/")
     } finally {
       setAttemptingJoin(false)
