@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Wallet, LogOut, Coins } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
 export function WalletConnect() {
   const currentAccount = useCurrentAccount()
@@ -13,6 +14,7 @@ export function WalletConnect() {
   const { mutate: connect } = useConnectWallet()
   const wallets = useWallets()
   const [isConnecting, setIsConnecting] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     console.log("[v0] Current account:", currentAccount)
@@ -36,6 +38,8 @@ export function WalletConnect() {
             onSuccess: () => {
               console.log("[v0] Wallet connected successfully")
               setIsConnecting(false)
+              // Redirect to home page after successful connection
+              router.push("/")
             },
             onError: (error) => {
               console.error("[v0] Wallet connection failed:", error)
