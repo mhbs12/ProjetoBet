@@ -149,6 +149,35 @@ export class SuiGameContract {
       return 0
     }
   }
+
+  async getTreasuryInfo(treasuryId: string) {
+    try {
+      const object = await this.client.getObject({
+        id: treasuryId,
+        options: { showContent: true },
+      })
+
+      if (object.data?.content?.dataType === "moveObject") {
+        const fields = (object.data.content as any).fields
+        const balance = Number.parseInt(fields.balance) / 1000000000 // Convert from MIST to SUI
+        
+        // The bet amount should be half the current balance (since first player already deposited)
+        const betAmount = balance / 2
+        
+        return {
+          balance,
+          betAmount,
+          treasuryId,
+          isActive: balance > 0
+        }
+      }
+
+      return null
+    } catch (error) {
+      console.error("Error getting treasury info:", error)
+      return null
+    }
+  }
 }
 
 export const suiContract = new SuiGameContract()

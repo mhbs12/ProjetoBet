@@ -71,17 +71,30 @@ export default function HomePage() {
     try {
       console.log("[v0] Joining room with modern SUI transaction...")
 
+      // Extract treasury ID from URL if the input is a full URL
+      let roomIdToJoin = joinRoomId.trim()
+      let treasuryIdFromUrl: string | undefined
+
+      if (joinRoomId.includes('/game/') && joinRoomId.includes('treasury=')) {
+        const url = new URL(joinRoomId)
+        const pathParts = url.pathname.split('/')
+        roomIdToJoin = pathParts[pathParts.length - 1]
+        treasuryIdFromUrl = url.searchParams.get('treasury') || undefined
+        console.log("[v0] Extracted room ID:", roomIdToJoin, "treasury:", treasuryIdFromUrl)
+      }
+
       const room = await gameStateManager.joinRoom(
-        joinRoomId,
+        roomIdToJoin,
         currentAccount.address,
         signAndExecuteTransaction,
+        treasuryIdFromUrl
       )
 
       setRooms((prev) => [...prev, room])
       setJoinRoomId("")
 
       console.log("[v0] Joined room successfully, redirecting...")
-      router.push(`/game/${joinRoomId}`)
+      router.push(`/game/${roomIdToJoin}${treasuryIdFromUrl ? `?treasury=${treasuryIdFromUrl}` : ''}`)
     } catch (error) {
       console.error("[v0] Failed to join room:", error)
       alert(`Failed to join room: ${error.message}`)
@@ -180,14 +193,17 @@ export default function HomePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="roomId">Room ID</Label>
+                <Label htmlFor="roomId">Room ID or Share Link</Label>
                 <Input
                   id="roomId"
                   value={joinRoomId}
                   onChange={(e) => setJoinRoomId(e.target.value)}
-                  placeholder="Enter room ID"
+                  placeholder="Enter room ID or paste share link"
                   disabled={joiningRoom}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  You can paste either the room ID or the full share link with treasury information
+                </p>
               </div>
               <Button onClick={joinRoom} className="w-full" disabled={!joinRoomId.trim() || joiningRoom}>
                 {joiningRoom ? (
