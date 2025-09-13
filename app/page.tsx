@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { WalletConnect } from "@/components/wallet-connect"
-import { Plus, Users, Coins, Trophy, Shield, Loader2 } from "lucide-react"
+import { Plus, Users, Coins, Trophy, Shield, Loader2, AlertTriangle } from "lucide-react"
 import { gameStateManager } from "@/lib/game-state"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -23,6 +24,17 @@ export default function HomePage() {
   const [joinRoomId, setJoinRoomId] = useState("")
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [joiningRoom, setJoiningRoom] = useState(false)
+  const [isContractConfigured, setIsContractConfigured] = useState(true)
+
+  // Check if contract is properly configured
+  useEffect(() => {
+    const packageId = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
+    setIsContractConfigured(!!packageId)
+    
+    if (!packageId) {
+      console.warn("[v0] Contract package ID not configured")
+    }
+  }, [])
 
   // Update wallet state when account changes
   useEffect(() => {
@@ -149,6 +161,20 @@ export default function HomePage() {
           <div className="flex justify-center mb-8">
             <WalletConnect />
           </div>
+
+          {!isContractConfigured && (
+            <Alert className="mb-8 border-amber-200 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="text-amber-800">Smart Contract Not Configured</AlertTitle>
+              <AlertDescription className="text-amber-700">
+                To use the betting functionality, you need to deploy a smart contract and set the{" "}
+                <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_CONTRACT_PACKAGE_ID</code> environment variable.
+                See the{" "}
+                <a href="/DEPLOYMENT.md" className="underline font-medium">deployment guide</a>{" "}
+                for instructions.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 mb-8">
@@ -184,7 +210,7 @@ export default function HomePage() {
                   disabled={creatingRoom}
                 />
               </div>
-              <Button onClick={createRoom} className="w-full" disabled={!newRoomName.trim() || creatingRoom}>
+              <Button onClick={createRoom} className="w-full" disabled={!newRoomName.trim() || creatingRoom || !isContractConfigured}>
                 {creatingRoom ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -194,6 +220,11 @@ export default function HomePage() {
                   "Create Room & Enter"
                 )}
               </Button>
+              {!isContractConfigured && (
+                <p className="text-xs text-muted-foreground text-center text-amber-600">
+                  Smart contract must be configured to create rooms
+                </p>
+              )}
               {creatingRoom && (
                 <p className="text-xs text-muted-foreground text-center">
                   Please confirm the transaction in your wallet...
@@ -224,7 +255,7 @@ export default function HomePage() {
                   You can paste either the room ID or the full share link with treasury information
                 </p>
               </div>
-              <Button onClick={joinRoom} className="w-full" disabled={!joinRoomId.trim() || joiningRoom}>
+              <Button onClick={joinRoom} className="w-full" disabled={!joinRoomId.trim() || joiningRoom || !isContractConfigured}>
                 {joiningRoom ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -234,6 +265,11 @@ export default function HomePage() {
                   "Join Room"
                 )}
               </Button>
+              {!isContractConfigured && (
+                <p className="text-xs text-muted-foreground text-center text-amber-600">
+                  Smart contract must be configured to join rooms
+                </p>
+              )}
               {joiningRoom && (
                 <p className="text-xs text-muted-foreground text-center">
                   Please confirm the transaction in your wallet...

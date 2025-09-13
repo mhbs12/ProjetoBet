@@ -24,11 +24,18 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
    - Get your contract package ID
 
 3. **Configure Environment**
-   \`\`\`bash
+   ```bash
    cp .env.local.example .env.local
    # Edit .env.local with your contract package ID
    NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0xYOUR_PACKAGE_ID_HERE
-   \`\`\`
+   ```
+
+   **⚠️ Important**: The application will not work without a valid contract package ID. You must:
+   1. Deploy your smart contract to SUI network
+   2. Copy the package ID from the deployment output
+   3. Set it in the `.env.local` file
+   
+   Without this configuration, betting transactions will fail with an error.
 
 4. **Run Application**
    \`\`\`bash
@@ -78,3 +85,34 @@ module 0x0::teste2 {
     use sui::balance::{Self, Balance};
     // ... (contract implementation)
 }
+
+
+## Troubleshooting
+
+### Transaction Errors
+
+If you're experiencing transaction failures when creating or joining betting rooms:
+
+1. **"Contract not configured"**
+   - Ensure `NEXT_PUBLIC_CONTRACT_PACKAGE_ID` is set in `.env.local`
+   - Verify the package ID is from a successfully deployed contract
+   - Restart the development server after changing environment variables
+
+2. **"Insufficient SUI balance"**
+   - Make sure your wallet has enough SUI for both the bet amount and gas fees
+   - Use the testnet faucet to get more SUI: https://discord.gg/sui
+
+3. **"Transaction failed" or wallet errors**
+   - Check that your wallet is properly connected
+   - Ensure you're on the correct network (testnet/mainnet)
+   - Try refreshing the page and reconnecting your wallet
+
+4. **Room creation fails**
+   - Verify your contract has the `criar_aposta` function
+   - Check that the bet amount is valid (minimum 0.001 SUI)
+   - Ensure sufficient wallet balance for bet + gas fees
+
+5. **Cannot join room**
+   - Verify the room ID or share link is correct
+   - Check that the treasury still exists and is valid
+   - Ensure you have sufficient balance to match the bet
