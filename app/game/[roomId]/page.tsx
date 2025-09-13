@@ -37,6 +37,17 @@ export default function GamePage() {
     const currentRoom = gameStateManager.getRoom(roomId)
     if (currentRoom) {
       setRoom(currentRoom)
+      
+      // Check if current user is the creator and mark them as present
+      const isCreator = currentRoom.players.length > 0 && currentRoom.players[0] === currentAccount.address
+      if (isCreator && !currentRoom.playersPresent.includes(currentAccount.address)) {
+        console.log("[v0] Creator entering room, marking as present")
+        const updatedRoom = gameStateManager.enterRoom(roomId, currentAccount.address)
+        if (updatedRoom) {
+          setRoom(updatedRoom)
+        }
+      }
+      
       // Determine player symbol based on address
       const isPlayerX = currentRoom.players[0] === currentAccount.address
       setPlayerSymbol(isPlayerX ? "X" : "O")
@@ -112,6 +123,16 @@ export default function GamePage() {
     })
   }
 
+  const handleEnterRoom = () => {
+    if (!currentAccount || !room) return
+    
+    console.log("[v0] Manually entering room")
+    const updatedRoom = gameStateManager.enterRoom(roomId, currentAccount.address)
+    if (updatedRoom) {
+      setRoom(updatedRoom)
+    }
+  }
+
   const handleGameFinish = async (gameRoom: GameRoom) => {
     if (!currentAccount || !gameRoom.winner) return
 
@@ -163,6 +184,37 @@ export default function GamePage() {
   const walletAddress = currentAccount?.address
   const isWinner = room.winner === walletAddress
   const isDraw = room.winner === null && isGameOver
+  
+  // Check presence states
+  const isCreator = room.players.length > 0 && room.players[0] === walletAddress
+  const creatorAddress = room.players.length > 0 ? room.players[0] : null
+  const isCreatorPresent = creatorAddress ? room.playersPresent.includes(creatorAddress) : false
+  const hasSecondPlayer = room.players.length === 2
+  const isSecondPlayerPresent = hasSecondPlayer ? room.playersPresent.includes(room.players[1]) : false
+  
+  // Determine waiting state message
+  const getWaitingMessage = () => {
+    if (!hasSecondPlayer) {
+      return {
+        title: "Waiting for Opponent",
+        description: "Share this link with a friend to start playing!"
+      }
+    } else if (!isCreatorPresent) {
+      return {
+        title: "Waiting for Creator",
+        description: "The room creator needs to enter the room for the game to begin."
+      }
+    } else if (!isSecondPlayerPresent) {
+      return {
+        title: "Waiting for Player 2",
+        description: "The second player needs to be present for the game to begin."
+      }
+    }
+    return {
+      title: "Starting Game...",
+      description: "Both players are present. Game starting..."
+    }
+  }
 
   return (
     <main className="min-h-screen bg-background p-4">
@@ -183,29 +235,62 @@ export default function GamePage() {
               <Card>
                 <CardContent className="p-8 text-center">
                   <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-pulse" />
-                  <h3 className="text-xl font-semibold mb-2">Waiting for Opponent</h3>
-                  <p className="text-muted-foreground mb-4">Share this link with a friend to start playing!</p>
-                  <div className="bg-muted p-3 rounded-lg mb-4">
-                    <p className="text-sm text-muted-foreground mb-1">Share this link:</p>
-                    {room.treasuryId ? (
-                      <div className="space-y-2">
-                        <p className="font-mono text-sm break-all">
-                          {gameStateManager.generateRoomShareUrl(room.id, room.treasuryId, typeof window !== 'undefined' ? window.location.origin : '')}
-                        </p>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={copyShareLink}
-                          className="w-full"
-                        >
-                          <Copy className="w-4 h-4 mr-2" />
-                          {copiedToClipboard ? "Copied!" : "Copy Link"}
-                        </Button>
+                  <h3 className="text-xl font-semibold mb-2">{getWaitingMessage().title}</h3>
+                  <p className="text-muted-foreground mb-4">{getWaitingMessage().description}</p>
+                  
+                  {/* Show presence status */}
+                  {hasSecondPlayer && (
+                    <div className="mb-4 p-3 bg-muted rounded-lg">
+                      <p className="text-sm font-semibold mb-2">Player Status:</p>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span>Creator (X): {creatorAddress?.slice(0, 8)}...{creatorAddress?.slice(-4)}</span>
+                          <span className={`px-2 py-1 rounded text-xs ${isCreatorPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {isCreatorPresent ? 'Present' : 'Not Present'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Player 2 (O): {room.players[1]?.slice(0, 8)}...{room.players[1]?.slice(-4)}</span>
+                          <span className={`px-2 py-1 rounded text-xs ${isSecondPlayerPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {isSecondPlayerPresent ? 'Present' : 'Not Present'}
+                          </span>
+                        </div>
                       </div>
-                    ) : (
-                      <p className="font-mono text-lg font-bold">{room.id}</p>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  
+                  {/* Show Enter Room button for creators who aren't present */}
+                  {isCreator && !isCreatorPresent && (
+                    <Button onClick={handleEnterRoom} className="w-full mb-4">
+                      Enter Room to Start Game
+                    </Button>
+                  )}
+                  
+                  {/* Share link section - only show if we still need a second player */}
+                  {!hasSecondPlayer && (
+                    <div className="bg-muted p-3 rounded-lg mb-4">
+                      <p className="text-sm text-muted-foreground mb-1">Share this link:</p>
+                      {room.treasuryId ? (
+                        <div className="space-y-2">
+                          <p className="font-mono text-sm break-all">
+                            {gameStateManager.generateRoomShareUrl(room.id, room.treasuryId, typeof window !== 'undefined' ? window.location.origin : '')}
+                          </p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={copyShareLink}
+                            className="w-full"
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            {copiedToClipboard ? "Copied!" : "Copy Link"}
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="font-mono text-lg font-bold">{room.id}</p>
+                      )}
+                    </div>
+                  )}
+                  
                   {room.treasuryId && (
                     <div className="mt-4 p-3 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Treasury Created:</p>

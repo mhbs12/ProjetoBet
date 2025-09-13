@@ -17,11 +17,13 @@ export interface Room {
       address: string
       name: string
       ready: boolean
+      present: boolean
     }
     O?: {
       address: string
       name: string
       ready: boolean
+      present: boolean
     }
   }
   gameState: GameState

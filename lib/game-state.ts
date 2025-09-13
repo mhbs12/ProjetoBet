@@ -6,6 +6,7 @@ export interface GameRoom {
   treasuryId?: string
   betAmount: number
   players: string[]
+  playersPresent: string[]  // Track which players are actively present
   gameState: "waiting" | "playing" | "finished"
   board: (string | null)[]
   currentPlayer: string
@@ -156,6 +157,7 @@ class GameStateManager {
         treasuryId: treasuryObject?.objectId,
         betAmount,
         players: [creatorAddress],
+        playersPresent: [creatorAddress], // Creator is present when creating the room
         gameState: "waiting",
         board: Array(9).fill(null),
         currentPlayer: creatorAddress,
@@ -182,6 +184,38 @@ class GameStateManager {
     }
   }
 
+  enterRoom(roomId: string, playerAddress: string): GameRoom | null {
+    const room = this.rooms.get(roomId)
+    if (!room) {
+      console.error("[v0] Room not found for entering:", roomId)
+      return null
+    }
+
+    // Check if player is part of this room
+    if (!room.players.includes(playerAddress)) {
+      console.error("[v0] Player not part of room:", playerAddress)
+      return null
+    }
+
+    // Mark player as present if not already
+    if (!room.playersPresent.includes(playerAddress)) {
+      room.playersPresent.push(playerAddress)
+      console.log("[v0] Player marked as present:", playerAddress)
+    }
+
+    // Check if we can start the game (both players present)
+    if (room.players.length === 2 && room.playersPresent.length === 2 && room.gameState === "waiting") {
+      room.gameState = "playing"
+      console.log("[v0] Both players now present, starting game")
+    }
+
+    this.rooms.set(roomId, room)
+    this.saveRoomsToStorage()
+    this.notifyListeners(roomId, room)
+    
+    return room
+  }
+
   async joinRoom(roomId: string, playerAddress: string, signAndExecute: any, treasuryId?: string): Promise<GameRoom> {
     let room = this.rooms.get(roomId)
     
@@ -200,6 +234,7 @@ class GameStateManager {
             treasuryId: treasuryId,
             betAmount: treasuryInfo.betAmount,
             players: [], // We don't know the first player address without additional blockchain query
+            playersPresent: [], // No players present initially when retrieved from treasury
             gameState: "waiting",
             board: Array(9).fill(null),
             currentPlayer: "", // This will be set when game starts
@@ -303,9 +338,24 @@ class GameStateManager {
         room.treasuryId = finalTreasuryId
       }
 
-      // Add player to room and start the game
+      // Add player to room
       room.players.push(playerAddress)
-      room.gameState = "playing"
+      room.playersPresent.push(playerAddress) // Mark joining player as present
+      
+      // Only start the game if the creator is also present
+      const creatorAddress = room.players[0]
+      const isCreatorPresent = room.playersPresent.includes(creatorAddress)
+      
+      if (isCreatorPresent && room.players.length === 2) {
+        room.gameState = "playing"
+        console.log("[v0] Both players present, starting game")
+      } else {
+        console.log("[v0] Waiting for creator to be present:", {
+          creatorAddress,
+          isCreatorPresent,
+          playersPresent: room.playersPresent
+        })
+      }
       
       // Set the first player as current player if none was set
       if (!room.currentPlayer && room.players.length > 0) {
@@ -472,6 +522,10 @@ class GameStateManager {
 
   // Helper method to add mock rooms for testing (includes shared storage)
   addMockRoom(room: GameRoom): void {
+    // Ensure playersPresent is initialized for mock rooms
+    if (!room.playersPresent) {
+      room.playersPresent = [...room.players] // For mock rooms, assume all players are present
+    }
     this.rooms.set(room.id, room)
     this.saveToSharedStorage(room)
   }
