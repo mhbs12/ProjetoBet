@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { WalletConnect } from "@/components/wallet-connect"
-import { Plus, Users, Coins, Trophy, Shield, Loader2, AlertTriangle } from "lucide-react"
+import { Plus, Users, Coins, Trophy, Shield, Loader2, AlertTriangle, Search, Clock } from "lucide-react"
 import { gameStateManager } from "@/lib/game-state"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -19,6 +19,8 @@ export default function HomePage() {
   const currentAccount = useCurrentAccount()
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
   const [rooms, setRooms] = useState<any[]>([])
+  const [availableRooms, setAvailableRooms] = useState<any[]>([])
+  const [roomSearchQuery, setRoomSearchQuery] = useState("")
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomBet, setNewRoomBet] = useState("0.1")
   const [joinRoomId, setJoinRoomId] = useState("")
@@ -34,16 +36,84 @@ export default function HomePage() {
     if (!packageId) {
       console.warn("[v0] Contract package ID not configured")
     }
+
+    // Create mock rooms for demonstration purposes
+    // TODO: Remove this in production - rooms will be loaded from the blockchain
+    createMockRooms()
   }, [])
 
   // Update wallet state when account changes
   useEffect(() => {
     if (currentAccount) {
       console.log("[v0] Account connected:", currentAccount.address)
+      loadAvailableRooms()
     } else {
       console.log("[v0] Account disconnected")
+      // Keep mock rooms for demonstration even when wallet is disconnected
+      const available = gameStateManager.getAvailableRooms()
+      setAvailableRooms(available)
     }
   }, [currentAccount])
+
+  // Load available rooms
+  const loadAvailableRooms = () => {
+    const available = gameStateManager.getAvailableRooms()
+    console.log("[v0] Loaded available rooms:", available)
+    setAvailableRooms(available)
+  }
+
+  // Create mock rooms for testing (TODO: Remove in production)
+  const createMockRooms = () => {
+    const mockRooms = [
+      {
+        id: "test1",
+        name: "High Stakes Game",
+        treasuryId: "0x123abc",
+        betAmount: 1.0,
+        players: ["0xplayer1"],
+        gameState: "waiting" as const,
+        board: Array(9).fill(null),
+        currentPlayer: "0xplayer1",
+        createdAt: Date.now() - 60000
+      },
+      {
+        id: "test2", 
+        name: "Beginner's Room",
+        treasuryId: "0x456def",
+        betAmount: 0.1,
+        players: ["0xplayer2"],
+        gameState: "waiting" as const,
+        board: Array(9).fill(null),
+        currentPlayer: "0xplayer2",
+        createdAt: Date.now() - 30000
+      },
+      {
+        id: "test3",
+        name: "Quick Match",
+        treasuryId: "0x789ghi",
+        betAmount: 0.5,
+        players: ["0xplayer3"],
+        gameState: "waiting" as const,
+        board: Array(9).fill(null),
+        currentPlayer: "0xplayer3",
+        createdAt: Date.now() - 120000
+      }
+    ]
+    
+    // Add mock rooms to the game state manager for testing
+    mockRooms.forEach(room => {
+      gameStateManager.roomsMap.set(room.id, room)
+    })
+    
+    // Update the available rooms state
+    const available = gameStateManager.getAvailableRooms()
+    setAvailableRooms(available)
+  }
+
+  // Filter available rooms based on search query
+  const filteredAvailableRooms = roomSearchQuery.trim()
+    ? gameStateManager.searchRooms(roomSearchQuery).filter(room => room.gameState === "waiting")
+    : availableRooms
 
   const createRoom = async () => {
     if (!newRoomName.trim() || !newRoomBet || !currentAccount) return
@@ -57,6 +127,7 @@ export default function HomePage() {
 
       const room = await gameStateManager.createRoom(
         roomId,
+        newRoomName.trim(),
         betAmount,
         currentAccount.address,
         signAndExecuteTransaction,
@@ -65,6 +136,7 @@ export default function HomePage() {
       setRooms((prev) => [...prev, room])
       setNewRoomName("")
       setNewRoomBet("0.1")
+      loadAvailableRooms() // Refresh available rooms
 
       console.log("[v0] Room created successfully, redirecting...")
       router.push(`/game/${roomId}`)
@@ -104,6 +176,7 @@ export default function HomePage() {
 
       setRooms((prev) => [...prev, room])
       setJoinRoomId("")
+      loadAvailableRooms() // Refresh available rooms
 
       console.log("[v0] Joined room successfully, redirecting...")
       router.push(`/game/${roomIdToJoin}${treasuryIdFromUrl ? `?treasury=${treasuryIdFromUrl}` : ''}`)
@@ -134,6 +207,50 @@ export default function HomePage() {
     }
   }
 
+  const joinRoomDirectly = async (room: any) => {
+    if (!currentAccount) return
+
+    setJoiningRoom(true)
+    try {
+      console.log("[v0] Joining room directly:", room.id)
+
+      const joinedRoom = await gameStateManager.joinRoom(
+        room.id,
+        currentAccount.address,
+        signAndExecuteTransaction,
+        room.treasuryId
+      )
+
+      setRooms((prev) => [...prev, joinedRoom])
+      loadAvailableRooms() // Refresh available rooms
+
+      console.log("[v0] Joined room successfully, redirecting...")
+      router.push(`/game/${room.id}${room.treasuryId ? `?treasury=${room.treasuryId}` : ''}`)
+    } catch (error) {
+      console.error("[v0] Failed to join room:", error)
+      
+      // Provide more user-friendly error messages
+      let userMessage = "Failed to join room"
+      if (error.message.includes("not found")) {
+        userMessage = "Room not found. Please try refreshing the page."
+      } else if (error.message.includes("full")) {
+        userMessage = "This room is already full. Please try a different room."
+      } else if (error.message.includes("already in room")) {
+        userMessage = "You are already in this room."
+      } else if (error.message.includes("Treasury")) {
+        userMessage = "Unable to access room treasury. The room may be invalid."
+      } else if (error.message.includes("Transaction failed")) {
+        userMessage = "Transaction failed. Please check your wallet connection and try again."
+      } else {
+        userMessage = `Failed to join room: ${error.message}`
+      }
+      
+      alert(userMessage)
+    } finally {
+      setJoiningRoom(false)
+    }
+  }
+
   if (!currentAccount) {
     return (
       <main className="min-h-screen bg-background p-4">
@@ -143,9 +260,76 @@ export default function HomePage() {
             <p className="text-muted-foreground text-lg">Play TicTacToe with real SUI cryptocurrency bets</p>
           </div>
 
-          <div className="flex justify-center">
+          <div className="flex justify-center mb-8">
             <WalletConnect />
           </div>
+
+          {/* Show Available Rooms even without wallet connection for demonstration */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="w-5 h-5" />
+                Available Rooms
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="roomSearch">Search Rooms</Label>
+                  <Input
+                    id="roomSearch"
+                    value={roomSearchQuery}
+                    onChange={(e) => setRoomSearchQuery(e.target.value)}
+                    placeholder="Search by room name or ID..."
+                    className="mb-4"
+                  />
+                </div>
+                
+                {filteredAvailableRooms.length > 0 ? (
+                  <div className="space-y-3">
+                    {filteredAvailableRooms.map((room) => (
+                      <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                        <div className="flex-1">
+                          <h4 className="font-semibold">{room.name}</h4>
+                          <p className="text-sm text-muted-foreground">Room ID: {room.id}</p>
+                          {room.treasuryId && (
+                            <p className="text-xs text-muted-foreground">Treasury: {room.treasuryId.slice(0, 8)}...</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge variant="outline">
+                              <Coins className="w-3 h-3 mr-1" />
+                              {room.betAmount} SUI
+                            </Badge>
+                            <Badge variant="secondary">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Waiting for player
+                            </Badge>
+                            <Badge variant="outline">
+                              <Users className="w-3 h-3 mr-1" />
+                              {room.players.length}/2
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <Button disabled variant="outline">
+                            Connect Wallet to Join
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {roomSearchQuery.trim() ? (
+                      <p>No rooms found matching "{roomSearchQuery}"</p>
+                    ) : (
+                      <p>No available rooms at the moment. Connect your wallet to create one!</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
     )
@@ -311,6 +495,84 @@ export default function HomePage() {
           </Card>
         </div>
 
+        {/* Available Rooms Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Available Rooms
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="roomSearch">Search Rooms</Label>
+                <Input
+                  id="roomSearch"
+                  value={roomSearchQuery}
+                  onChange={(e) => setRoomSearchQuery(e.target.value)}
+                  placeholder="Search by room name or ID..."
+                  className="mb-4"
+                />
+              </div>
+              
+              {filteredAvailableRooms.length > 0 ? (
+                <div className="space-y-3">
+                  {filteredAvailableRooms.map((room) => (
+                    <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                      <div className="flex-1">
+                        <h4 className="font-semibold">{room.name}</h4>
+                        <p className="text-sm text-muted-foreground">Room ID: {room.id}</p>
+                        {room.treasuryId && (
+                          <p className="text-xs text-muted-foreground">Treasury: {room.treasuryId.slice(0, 8)}...</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="outline">
+                            <Coins className="w-3 h-3 mr-1" />
+                            {room.betAmount} SUI
+                          </Badge>
+                          <Badge variant="secondary">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Waiting for player
+                          </Badge>
+                          <Badge variant="outline">
+                            <Users className="w-3 h-3 mr-1" />
+                            {room.players.length}/2
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <Button 
+                          onClick={() => joinRoomDirectly(room)} 
+                          disabled={joiningRoom || !isContractConfigured}
+                          variant="default"
+                        >
+                          {joiningRoom ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Joining...
+                            </>
+                          ) : (
+                            "Join Room"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  {roomSearchQuery.trim() ? (
+                    <p>No rooms found matching "{roomSearchQuery}"</p>
+                  ) : (
+                    <p>No available rooms at the moment. Create one above!</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {rooms.length > 0 && (
           <Card>
             <CardHeader>
@@ -321,7 +583,7 @@ export default function HomePage() {
                 {rooms.map((room) => (
                   <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <h4 className="font-semibold">Room {room.id}</h4>
+                      <h4 className="font-semibold">{room.name || `Room ${room.id}`}</h4>
                       <p className="text-sm text-muted-foreground">Room ID: {room.id}</p>
                       {room.treasuryId && (
                         <p className="text-xs text-muted-foreground">Treasury: {room.treasuryId.slice(0, 8)}...</p>
