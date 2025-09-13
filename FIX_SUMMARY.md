@@ -1,43 +1,45 @@
-# Betting Transaction Error Fix - Summary
+# Network Configuration Fix - Summary
 
 ## Problem Solved ✅
 
-The issue "na hora de criar aposta, eu mando a minha transaçao mas ela da erro" (transaction error when creating bets) has been identified and fixed.
+The issue "ainda nao esta confirmando as transaçoes, acho que oq pode estar dando erro é que o pacote foi publicado na devnet, ajuste para funcionar na devnet" has been identified and fixed.
 
 ## Root Cause
 
-The main problem was **missing smart contract configuration**. The application requires the `NEXT_PUBLIC_CONTRACT_PACKAGE_ID` environment variable to be set, but:
+The main problem was **network configuration inconsistency**. The application had mixed network settings:
 
-1. No clear error message was shown when the contract wasn't configured
-2. Users could attempt transactions that would always fail
-3. Error messages were not user-friendly
+1. **Provider Configuration**: Set to `devnet` in `app/providers.tsx`
+2. **Integration Layer**: Defaulted to `testnet` in `lib/sui-integration.ts`
+3. **Environment Example**: Configured for `testnet` in `.env.local.example`
+
+This mismatch caused transactions to fail because the frontend was connecting to different networks.
 
 ## Fixes Applied
 
-### 1. Enhanced Error Handling
-- Added comprehensive validation for all transaction inputs
-- Improved error messages with specific guidance
-- Better logging for debugging issues
+### 1. Network Configuration Consistency
+- Changed `lib/sui-integration.ts` to default to `devnet` instead of `testnet`
+- Updated `.env.local.example` to use `devnet` as default
+- Ensured all components use `devnet` consistently
 
-### 2. User Interface Improvements
-- Warning alert when contract is not configured
-- Betting buttons disabled until properly configured
-- Clear instructions on how to fix setup issues
+### 2. Enhanced Logging
+- Added network initialization logging to show which network is being used
+- Added SUI client URL logging for debugging
+- Enhanced contract validation error messages to include network information
 
-### 3. Configuration Validation
-- Application now checks contract configuration on startup
-- Provides helpful setup instructions
-- Prevents failed transactions due to missing configuration
+### 3. Documentation Updates
+- Updated `DEPLOYMENT.md` for devnet deployment instructions
+- Changed README.md to reference devnet faucets and testing
+- Updated troubleshooting guides for devnet
 
-### 4. Better Documentation
-- Added troubleshooting section to README
-- Clear step-by-step fix instructions
-- Enhanced deployment guide warnings
+### 4. Environment Configuration
+- Created `.env.local` file with proper devnet configuration
+- Added support for devnet in network type definitions
 
-## How to Fix Your Setup
+## How to Test Your Setup
 
-1. **Deploy Your Smart Contract**
+1. **Deploy Your Smart Contract to Devnet**
    ```bash
+   sui client switch --env devnet
    sui client publish --gas-budget 20000000
    ```
 
@@ -48,6 +50,7 @@ The main problem was **missing smart contract configuration**. The application r
 3. **Configure Environment**
    ```bash
    # Edit .env.local file
+   NEXT_PUBLIC_SUI_NETWORK=devnet
    NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0xYOUR_PACKAGE_ID_HERE
    ```
 
@@ -59,27 +62,27 @@ The main problem was **missing smart contract configuration**. The application r
 ## Testing Your Fix
 
 1. Open the application in your browser
-2. If contract is not configured, you'll see a warning message
-3. The betting buttons will be disabled with helpful text
-4. After configuring the contract ID, restart the server
-5. The warning should disappear and betting should work
+2. Check browser console for network initialization messages:
+   - `[v0] SUI Client initialized for network: devnet`
+   - `[v0] SUI Client URL: https://fullnode.devnet.sui.io:443`
+3. If contract is configured, transactions should work on devnet
+4. Get devnet SUI from: https://faucet.devnet.sui.io/
 
 ## Expected Behavior After Fix
 
-- ✅ Clear error messages if contract not configured
-- ✅ Helpful instructions for setup
-- ✅ Disabled functionality until properly configured
-- ✅ Better error handling for wallet/transaction issues
-- ✅ Minimum bet validation (0.001 SUI)
-- ✅ Improved logging for debugging
+- ✅ Consistent devnet network configuration across all components
+- ✅ SUI client connects to `https://fullnode.devnet.sui.io:443`
+- ✅ Clear logging shows which network is being used
+- ✅ Transactions work with devnet-deployed contracts
+- ✅ Proper error messages if contract not configured
 
 ## If You Still Have Issues
 
 Check the browser console for detailed error messages. Common issues:
 
-1. **Insufficient SUI**: Get more from testnet faucet
-2. **Wrong network**: Ensure wallet is on testnet
-3. **Contract errors**: Verify contract deployment was successful
+1. **Insufficient SUI**: Get more from devnet faucet: https://faucet.devnet.sui.io/
+2. **Wrong network**: Ensure wallet is on devnet
+3. **Contract errors**: Verify contract deployment was successful on devnet
 4. **Wallet connection**: Try disconnecting and reconnecting
 
-The application now provides much clearer guidance on what's wrong and how to fix it!
+The application now consistently uses devnet and provides clear guidance on configuration!

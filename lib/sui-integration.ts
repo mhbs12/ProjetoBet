@@ -10,6 +10,13 @@ export class SuiGameContract {
 
   constructor() {
     this.client = new SuiClient({ url: getFullnodeUrl(NETWORK) })
+    
+    // Log network configuration for debugging
+    if (typeof window !== "undefined") {
+      console.log(`[v0] SUI Client initialized for network: ${NETWORK}`)
+      console.log(`[v0] SUI Client URL: ${getFullnodeUrl(NETWORK)}`)
+      console.log(`[v0] Contract Package ID: ${CONTRACT_PACKAGE_ID || 'NOT CONFIGURED'}`)
+    }
   }
 
   private validateContract(): boolean {
@@ -18,10 +25,21 @@ export class SuiGameContract {
         console.error("[v0] Contract package ID not configured. Cannot execute blockchain transactions.")
         console.error("[v0] Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID in your environment variables.")
         console.error("[v0] Example: NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0x1234567890abcdef1234567890abcdef12345678")
+        console.error(`[v0] Current network: ${NETWORK}`)
+        console.error(`[v0] Current SUI endpoint: ${getFullnodeUrl(NETWORK)}`)
       }
       return false
     }
     return true
+  }
+
+  getNetworkInfo() {
+    return {
+      network: NETWORK,
+      endpoint: getFullnodeUrl(NETWORK),
+      contractPackageId: CONTRACT_PACKAGE_ID,
+      gasbudget: DEFAULT_GAS_BUDGET
+    }
   }
 
   async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteCallback: any) {
