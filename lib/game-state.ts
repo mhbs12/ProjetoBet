@@ -54,56 +54,38 @@ class GameStateManager {
   async createRoom(roomId: string, betAmount: number, creatorAddress: string, signAndExecute: any): Promise<GameRoom> {
     console.log("[v0] Creating room with modern SUI transaction")
 
-    // Create a promise that resolves when the transaction completes
-    const result = await new Promise<any>((resolve, reject) => {
-      try {
-        suiContract.createBettingRoom(creatorAddress, betAmount, (transactionData: any) => {
-          signAndExecute(
-            transactionData,
-            {
-              onSuccess: (result: any) => {
-                console.log("[v0] Transaction successful:", result)
-                
-                // Extract treasury object ID from transaction result
-                const treasuryObject = result.objectChanges?.find(
-                  (change: any) => change.type === "created" && change.objectType.includes("Treasury"),
-                )
+    try {
+      // Call the SUI contract to create betting room and get the transaction result
+      const result = await suiContract.createBettingRoom(creatorAddress, betAmount, signAndExecute)
+      
+      console.log("[v0] Transaction successful:", result)
+      
+      // Extract treasury object ID from transaction result
+      const treasuryObject = result.objectChanges?.find(
+        (change: any) => change.type === "created" && change.objectType.includes("Treasury"),
+      )
 
-                resolve({
-                  success: true,
-                  treasuryId: treasuryObject?.objectId,
-                  transactionDigest: result.digest,
-                })
-              },
-              onError: (error: any) => {
-                console.error("[v0] Transaction failed:", error)
-                reject(new Error(`Failed to create betting room: ${error.message || error}`))
-              },
-            }
-          )
-        })
-      } catch (error) {
-        reject(new Error(`Failed to create betting room: ${error.message || error}`))
+      const room: GameRoom = {
+        id: roomId,
+        treasuryId: treasuryObject?.objectId,
+        betAmount,
+        players: [creatorAddress],
+        gameState: "waiting",
+        board: Array(9).fill(null),
+        currentPlayer: creatorAddress,
+        transactionDigest: result.digest,
       }
-    })
 
-    const room: GameRoom = {
-      id: roomId,
-      treasuryId: result.treasuryId,
-      betAmount,
-      players: [creatorAddress],
-      gameState: "waiting",
-      board: Array(9).fill(null),
-      currentPlayer: creatorAddress,
-      transactionDigest: result.transactionDigest,
+      this.rooms.set(roomId, room)
+      this.saveRoomsToStorage()
+      this.notifyListeners(roomId, room)
+
+      console.log("[v0] Room created successfully with treasury:", treasuryObject?.objectId)
+      return room
+    } catch (error) {
+      console.error("[v0] Failed to create room:", error)
+      throw new Error(`Failed to create betting room: ${error.message || error}`)
     }
-
-    this.rooms.set(roomId, room)
-    this.saveRoomsToStorage()
-    this.notifyListeners(roomId, room)
-
-    console.log("[v0] Room created successfully with treasury:", result.treasuryId)
-    return room
   }
 
   async joinRoom(roomId: string, playerAddress: string, signAndExecute: any, treasuryId?: string): Promise<GameRoom> {
@@ -163,53 +145,37 @@ class GameStateManager {
 
     console.log("[v0] Joining room with modern SUI transaction, treasury:", effectiveTreasuryId)
 
-    // Execute blockchain transaction to join the betting room
-    const result = await new Promise<any>((resolve, reject) => {
-      try {
-        suiContract.joinBettingRoom(effectiveTreasuryId!, room.betAmount, (transactionData: any) => {
-          signAndExecute(
-            transactionData,
-            {
-              onSuccess: (result: any) => {
-                console.log("[v0] Join transaction successful:", result)
-                resolve({
-                  success: true,
-                  transactionDigest: result.digest,
-                })
-              },
-              onError: (error: any) => {
-                console.error("[v0] Join transaction failed:", error)
-                reject(new Error(`Transaction failed: ${error.message || error}`))
-              },
-            }
-          )
-        })
-      } catch (error) {
-        reject(new Error(`Failed to prepare transaction: ${error.message || error}`))
+    try {
+      // Execute blockchain transaction to join the betting room
+      const result = await suiContract.joinBettingRoom(effectiveTreasuryId!, room.betAmount, signAndExecute)
+      
+      console.log("[v0] Join transaction successful:", result)
+
+      // Update the room with the treasury ID if it wasn't set before
+      if (!room.treasuryId && effectiveTreasuryId) {
+        room.treasuryId = effectiveTreasuryId
       }
-    })
 
-    // Update the room with the treasury ID if it wasn't set before
-    if (!room.treasuryId && effectiveTreasuryId) {
-      room.treasuryId = effectiveTreasuryId
+      // Add player to room and start the game
+      room.players.push(playerAddress)
+      room.gameState = "playing"
+      
+      // Set the first player as current player if none was set
+      if (!room.currentPlayer && room.players.length > 0) {
+        room.currentPlayer = room.players[0]
+      }
+
+      // Update local storage and notify listeners
+      this.rooms.set(roomId, room)
+      this.saveRoomsToStorage()
+      this.notifyListeners(roomId, room)
+
+      console.log("[v0] Player joined successfully, room updated:", room)
+      return room
+    } catch (error) {
+      console.error("[v0] Failed to join room:", error)
+      throw new Error(`Failed to join betting room: ${error.message || error}`)
     }
-
-    // Add player to room and start the game
-    room.players.push(playerAddress)
-    room.gameState = "playing"
-    
-    // Set the first player as current player if none was set
-    if (!room.currentPlayer && room.players.length > 0) {
-      room.currentPlayer = room.players[0]
-    }
-
-    // Update local storage and notify listeners
-    this.rooms.set(roomId, room)
-    this.saveRoomsToStorage()
-    this.notifyListeners(roomId, room)
-
-    console.log("[v0] Player joined successfully, room updated:", room)
-    return room
   }
 
   async finishGame(roomId: string, winner: string | null, signAndExecute: any): Promise<void> {
@@ -220,31 +186,10 @@ class GameStateManager {
 
     if (winner) {
       try {
-        const result = await new Promise<any>((resolve, reject) => {
-          try {
-            suiContract.finishGame(room.treasuryId!, winner, (transactionData: any) => {
-              signAndExecute(
-                transactionData,
-                {
-                  onSuccess: (result: any) => {
-                    console.log("[v0] Finish game transaction successful:", result)
-                    resolve({
-                      success: true,
-                      transactionDigest: result.digest,
-                    })
-                  },
-                  onError: (error: any) => {
-                    console.error("[v0] Finish game transaction failed:", error)
-                    reject(new Error(`Failed to finish game: ${error.message || error}`))
-                  },
-                }
-              )
-            })
-          } catch (error) {
-            reject(new Error(`Failed to finish game: ${error.message || error}`))
-          }
-        })
-
+        // Execute blockchain transaction to finish the game and distribute prizes
+        const result = await suiContract.finishGame(room.treasuryId!, winner, signAndExecute)
+        
+        console.log("[v0] Finish game transaction successful:", result)
         room.winner = winner
         room.gameState = "finished"
         console.log("[v0] Prize distributed to winner:", winner)

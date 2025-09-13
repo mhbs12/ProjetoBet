@@ -42,7 +42,7 @@ export class SuiGameContract {
     }
   }
 
-  async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteCallback: any) {
+  async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteTransaction: any) {
     if (!this.validateContract()) {
       throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID environment variable.")
     }
@@ -84,16 +84,25 @@ export class SuiGameContract {
 
       console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`)
 
-      // Call the callback with the transaction object for modern dapp-kit
-      const transactionData = {
-        transaction: tx,
-        options: {
-          showEffects: true,
-          showObjectChanges: true,
-        },
-      }
-
-      return signAndExecuteCallback(transactionData)
+      // Execute the transaction using the modern dapp-kit pattern
+      // The signAndExecuteTransaction is a mutate function that returns a promise
+      return new Promise((resolve, reject) => {
+        signAndExecuteTransaction(
+          {
+            transaction: tx,
+          },
+          {
+            onSuccess: (result: any) => {
+              console.log(`[v0] Transaction successful with digest: ${result.digest}`)
+              resolve(result)
+            },
+            onError: (error: any) => {
+              console.error(`[v0] Transaction failed:`, error)
+              reject(error)
+            },
+          }
+        )
+      })
     } catch (error) {
       console.error("Error creating betting room:", error)
       
@@ -114,7 +123,7 @@ export class SuiGameContract {
     }
   }
 
-  async joinBettingRoom(treasuryId: string, betAmount: number, signAndExecuteCallback: any) {
+  async joinBettingRoom(treasuryId: string, betAmount: number, signAndExecuteTransaction: any) {
     if (!this.validateContract()) {
       throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID environment variable.")
     }
@@ -152,15 +161,24 @@ export class SuiGameContract {
 
       console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta`)
 
-      // Call the callback with the transaction object for modern dapp-kit
-      const transactionData = {
-        transaction: tx,
-        options: {
-          showEffects: true,
-        },
-      }
-
-      return signAndExecuteCallback(transactionData)
+      // Execute the transaction using the modern dapp-kit pattern
+      return new Promise((resolve, reject) => {
+        signAndExecuteTransaction(
+          {
+            transaction: tx,
+          },
+          {
+            onSuccess: (result: any) => {
+              console.log(`[v0] Join transaction successful with digest: ${result.digest}`)
+              resolve(result)
+            },
+            onError: (error: any) => {
+              console.error(`[v0] Join transaction failed:`, error)
+              reject(error)
+            },
+          }
+        )
+      })
     } catch (error) {
       console.error("Error joining betting room:", error)
       
@@ -183,7 +201,7 @@ export class SuiGameContract {
     }
   }
 
-  async finishGame(treasuryId: string, winnerAddress: string, signAndExecuteCallback: any) {
+  async finishGame(treasuryId: string, winnerAddress: string, signAndExecuteTransaction: any) {
     if (!this.validateContract()) {
       throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID.")
     }
@@ -200,15 +218,24 @@ export class SuiGameContract {
         arguments: [tx.pure.address(winnerAddress), tx.object(treasuryId)],
       })
 
-      // Call the callback with the transaction object for modern dapp-kit
-      const transactionData = {
-        transaction: tx,
-        options: {
-          showEffects: true,
-        },
-      }
-
-      return signAndExecuteCallback(transactionData)
+      // Execute the transaction using the modern dapp-kit pattern
+      return new Promise((resolve, reject) => {
+        signAndExecuteTransaction(
+          {
+            transaction: tx,
+          },
+          {
+            onSuccess: (result: any) => {
+              console.log(`[v0] Finish game transaction successful with digest: ${result.digest}`)
+              resolve(result)
+            },
+            onError: (error: any) => {
+              console.error(`[v0] Finish game transaction failed:`, error)
+              reject(error)
+            },
+          }
+        )
+      })
     } catch (error) {
       console.error("Error finishing game:", error)
       throw error
