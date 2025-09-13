@@ -1,8 +1,9 @@
 import { Transaction } from "@mysten/sui/transactions"
 import { SuiClient, getFullnodeUrl } from "@mysten/sui/client"
 
-const NETWORK = "testnet" // Change to 'mainnet' for production
+const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as "testnet" | "mainnet") || "testnet"
 const CONTRACT_PACKAGE_ID = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
+const DEFAULT_GAS_BUDGET = parseInt(process.env.NEXT_PUBLIC_DEFAULT_GAS_BUDGET || "10000000") // 0.01 SUI default
 
 export class SuiGameContract {
   private client: SuiClient
@@ -28,9 +29,17 @@ export class SuiGameContract {
 
     try {
       const tx = new Transaction()
+      
+      // Set gas budget to avoid automatic calculation issues
+      tx.setGasBudget(DEFAULT_GAS_BUDGET)
 
-      const [coin] = tx.splitCoins(tx.gas, [betAmount * 1000000000])
+      // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
+      const amountInMist = BigInt(Math.floor(betAmount * 1000000000))
+      
+      // Split coins from gas to create the bet amount
+      const [coin] = tx.splitCoins(tx.gas, [amountInMist])
 
+      // Call the move function with correct arguments
       tx.moveCall({
         target: `${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`,
         arguments: [coin],
@@ -59,12 +68,20 @@ export class SuiGameContract {
 
     try {
       const tx = new Transaction()
+      
+      // Set gas budget to avoid automatic calculation issues
+      tx.setGasBudget(DEFAULT_GAS_BUDGET)
 
-      const [coin] = tx.splitCoins(tx.gas, [betAmount * 1000000000])
+      // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
+      const amountInMist = BigInt(Math.floor(betAmount * 1000000000))
+      
+      // Split coins from gas to create the bet amount
+      const [coin] = tx.splitCoins(tx.gas, [amountInMist])
 
+      // Call the move function with correct arguments order: treasury first, then coin
       tx.moveCall({
         target: `${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta`,
-        arguments: [treasuryId, coin],
+        arguments: [tx.object(treasuryId), coin],
       })
 
       // Call the callback with the transaction object for modern dapp-kit
@@ -89,10 +106,14 @@ export class SuiGameContract {
 
     try {
       const tx = new Transaction()
+      
+      // Set gas budget to avoid automatic calculation issues
+      tx.setGasBudget(DEFAULT_GAS_BUDGET)
 
+      // Call the move function with correct arguments order: winner_address first, then treasury
       tx.moveCall({
         target: `${CONTRACT_PACKAGE_ID}::teste2::finish_game`,
-        arguments: [winnerAddress, treasuryId],
+        arguments: [tx.pure.address(winnerAddress), tx.object(treasuryId)],
       })
 
       // Call the callback with the transaction object for modern dapp-kit

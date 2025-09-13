@@ -27,6 +27,7 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
    \`\`\`bash
    cp .env.local.example .env.local
    # Edit .env.local with your contract package ID
+   NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0xYOUR_PACKAGE_ID_HERE
    \`\`\`
 
 4. **Run Application**
