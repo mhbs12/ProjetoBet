@@ -33,7 +33,7 @@ export class SuiGameContract {
 
       tx.moveCall({
         target: `${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`,
-        arguments: [coin, betAmount * 1000000000],
+        arguments: [coin],
       })
 
       const result = await signAndExecuteTransaction({
@@ -72,7 +72,7 @@ export class SuiGameContract {
 
       tx.moveCall({
         target: `${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta`,
-        arguments: [treasuryId, coin, betAmount * 1000000000],
+        arguments: [treasuryId, coin],
       })
 
       const result = await signAndExecuteTransaction({
