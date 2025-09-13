@@ -114,7 +114,7 @@ export default function HomePage() {
     
     // Add mock rooms to the game state manager for testing
     mockRooms.forEach(room => {
-      gameStateManager.roomsMap.set(room.id, room)
+      gameStateManager.addMockRoom(room)
     })
     
     // Update the available rooms state

@@ -14,6 +14,9 @@ export interface GameRoom {
   createdAt: number
 }
 
+// Shared room storage that persists across wallet connections
+const SHARED_ROOMS_STORAGE_KEY = 'shared-game-rooms'
+
 class GameStateManager {
   private rooms = new Map<string, GameRoom>()
   private listeners = new Map<string, ((room: GameRoom) => void)[]>()
@@ -21,6 +24,7 @@ class GameStateManager {
 
   constructor() {
     this.loadRoomsFromStorage()
+    this.loadSharedRooms()
   }
 
   // Allow access to rooms map for testing
@@ -44,6 +48,26 @@ class GameStateManager {
     }
   }
 
+  private loadSharedRooms(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const sharedRooms = localStorage.getItem(SHARED_ROOMS_STORAGE_KEY)
+      if (sharedRooms) {
+        const roomsData = JSON.parse(sharedRooms)
+        Object.entries(roomsData).forEach(([id, room]) => {
+          // Only add room if it doesn't exist locally to avoid conflicts
+          if (!this.rooms.has(id)) {
+            this.rooms.set(id, room as GameRoom)
+          }
+        })
+        console.log('[v0] Loaded shared rooms:', Object.keys(roomsData).length)
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to load shared rooms from storage:', error)
+    }
+  }
+
   private saveRoomsToStorage(): void {
     if (typeof window === 'undefined') return
     
@@ -55,6 +79,40 @@ class GameStateManager {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(roomsData))
     } catch (error) {
       console.warn('[v0] Failed to save rooms to storage:', error)
+    }
+  }
+
+  private saveToSharedStorage(room: GameRoom): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const sharedRooms = localStorage.getItem(SHARED_ROOMS_STORAGE_KEY)
+      const roomsData = sharedRooms ? JSON.parse(sharedRooms) : {}
+      
+      // Only save rooms that are waiting or recently created
+      if (room.gameState === 'waiting' || (Date.now() - room.createdAt) < 60000) {
+        roomsData[room.id] = room
+        localStorage.setItem(SHARED_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
+        console.log('[v0] Saved room to shared storage:', room.id)
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to save room to shared storage:', error)
+    }
+  }
+
+  private removeFromSharedStorage(roomId: string): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const sharedRooms = localStorage.getItem(SHARED_ROOMS_STORAGE_KEY)
+      if (sharedRooms) {
+        const roomsData = JSON.parse(sharedRooms)
+        delete roomsData[roomId]
+        localStorage.setItem(SHARED_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
+        console.log('[v0] Removed room from shared storage:', roomId)
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to remove room from shared storage:', error)
     }
   }
 
@@ -107,6 +165,7 @@ class GameStateManager {
 
       this.rooms.set(roomId, room)
       this.saveRoomsToStorage()
+      this.saveToSharedStorage(room) // Save to shared storage for cross-wallet visibility
       this.notifyListeners(roomId, room)
 
       if (!treasuryObject?.objectId) {
@@ -256,6 +315,9 @@ class GameStateManager {
       // Update local storage and notify listeners
       this.rooms.set(roomId, room)
       this.saveRoomsToStorage()
+      
+      // Remove from shared storage since the room is now playing (not available)
+      this.removeFromSharedStorage(roomId)
       this.notifyListeners(roomId, room)
 
       console.log("[v0] Player joined successfully, room updated:", room)
@@ -288,6 +350,7 @@ class GameStateManager {
 
     this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
+    this.removeFromSharedStorage(roomId) // Remove finished game from shared storage
     this.notifyListeners(roomId, room)
   }
 
@@ -347,6 +410,9 @@ class GameStateManager {
   }
 
   getAvailableRooms(): GameRoom[] {
+    // Reload shared rooms to get latest data from other wallets
+    this.loadSharedRooms()
+    
     return Array.from(this.rooms.values()).filter(room => room.gameState === "waiting")
   }
 
@@ -402,6 +468,12 @@ class GameStateManager {
     
     const urlParams = new URLSearchParams(window.location.search)
     return urlParams.get('treasury')
+  }
+
+  // Helper method to add mock rooms for testing (includes shared storage)
+  addMockRoom(room: GameRoom): void {
+    this.rooms.set(room.id, room)
+    this.saveToSharedStorage(room)
   }
 }
 
