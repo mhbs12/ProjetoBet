@@ -76,13 +76,13 @@ export class SuiGameContract {
       // Split coins from gas to create the bet amount
       const [coin] = tx.splitCoins(tx.gas, [amountInMist])
 
-      // Call the move function with correct arguments
+      // Call the move function with correct arguments: SUI object and bet amount
       tx.moveCall({
         target: `${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`,
-        arguments: [coin],
+        arguments: [coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::criar_aposta with coin and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       // The signAndExecuteTransaction is a mutate function that returns a promise
