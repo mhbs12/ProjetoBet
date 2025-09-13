@@ -150,33 +150,71 @@ export class SuiGameContract {
     }
   }
 
-  async getTreasuryInfo(treasuryId: string) {
-    try {
-      const object = await this.client.getObject({
-        id: treasuryId,
-        options: { showContent: true },
-      })
+  async getTreasuryInfo(treasuryId: string, retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[v0] Getting treasury info (attempt ${attempt}/${retries}):`, treasuryId)
+        
+        const object = await this.client.getObject({
+          id: treasuryId,
+          options: { showContent: true },
+        })
 
-      if (object.data?.content?.dataType === "moveObject") {
-        const fields = (object.data.content as any).fields
-        const balance = Number.parseInt(fields.balance) / 1000000000 // Convert from MIST to SUI
-        
-        // The bet amount should be half the current balance (since first player already deposited)
-        const betAmount = balance / 2
-        
-        return {
-          balance,
-          betAmount,
-          treasuryId,
-          isActive: balance > 0
+        if (!object.data) {
+          console.warn(`[v0] Treasury object not found: ${treasuryId}`)
+          if (attempt < retries) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)) // Exponential backoff
+            continue
+          }
+          throw new Error(`Treasury not found: ${treasuryId}`)
         }
-      }
 
-      return null
-    } catch (error) {
-      console.error("Error getting treasury info:", error)
-      return null
+        if (object.data.content?.dataType === "moveObject") {
+          const fields = (object.data.content as any).fields
+          
+          if (!fields || !fields.balance) {
+            console.warn(`[v0] Invalid treasury structure:`, fields)
+            throw new Error(`Invalid treasury structure: missing balance field`)
+          }
+          
+          const balance = Number.parseInt(fields.balance) / 1000000000 // Convert from MIST to SUI
+          
+          if (balance <= 0) {
+            console.warn(`[v0] Treasury has no balance:`, balance)
+            throw new Error(`Treasury is empty or invalid`)
+          }
+          
+          // The bet amount should be half the current balance (since first player already deposited)
+          const betAmount = balance / 2
+          
+          const treasuryInfo = {
+            balance,
+            betAmount,
+            treasuryId,
+            isActive: balance > 0
+          }
+          
+          console.log(`[v0] Treasury info retrieved successfully:`, treasuryInfo)
+          return treasuryInfo
+        }
+
+        console.warn(`[v0] Treasury object has unexpected data type:`, object.data.content?.dataType)
+        throw new Error(`Invalid treasury object type`)
+      } catch (error) {
+        console.error(`[v0] Error getting treasury info (attempt ${attempt}/${retries}):`, error)
+        
+        if (attempt < retries) {
+          // Exponential backoff: wait 1s, 2s, 3s between retries
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+          continue
+        }
+        
+        // On final attempt, throw a more descriptive error
+        throw new Error(`Failed to get treasury info after ${retries} attempts: ${error.message}`)
+      }
     }
+    
+    return null
   }
 }
 

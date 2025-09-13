@@ -97,7 +97,26 @@ export default function HomePage() {
       router.push(`/game/${roomIdToJoin}${treasuryIdFromUrl ? `?treasury=${treasuryIdFromUrl}` : ''}`)
     } catch (error) {
       console.error("[v0] Failed to join room:", error)
-      alert(`Failed to join room: ${error.message}`)
+      
+      // Provide more user-friendly error messages
+      let userMessage = "Failed to join room"
+      if (error.message.includes("not found")) {
+        userMessage = "Room not found. Please check the room ID or share link and try again."
+      } else if (error.message.includes("full")) {
+        userMessage = "This room is already full. Please try joining a different room."
+      } else if (error.message.includes("already in room")) {
+        userMessage = "You are already in this room."
+      } else if (error.message.includes("Treasury")) {
+        userMessage = "Unable to access room treasury. The room may be invalid or expired."
+      } else if (error.message.includes("Transaction failed")) {
+        userMessage = "Transaction failed. Please check your wallet connection and try again."
+      } else if (error.message.includes("Failed to retrieve room information")) {
+        userMessage = "Unable to retrieve room information. Please check your internet connection and try again."
+      } else {
+        userMessage = `Failed to join room: ${error.message}`
+      }
+      
+      alert(userMessage)
     } finally {
       setJoiningRoom(false)
     }
