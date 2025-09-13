@@ -8,15 +8,15 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { WalletConnect } from "@/components/wallet-connect"
 import { Plus, Users, Coins, Trophy, Shield, Loader2 } from "lucide-react"
-import { suiWallet } from "@/lib/sui-wallet"
 import { gameStateManager } from "@/lib/game-state"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useCurrentAccount } from "@mysten/dapp-kit"
+import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit"
 
 export default function HomePage() {
   const router = useRouter()
   const currentAccount = useCurrentAccount()
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
   const [rooms, setRooms] = useState<any[]>([])
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomBet, setNewRoomBet] = useState("0.1")
@@ -28,10 +28,8 @@ export default function HomePage() {
   useEffect(() => {
     if (currentAccount) {
       console.log("[v0] Account connected:", currentAccount.address)
-      suiWallet.setConnectionState(true, currentAccount.address)
     } else {
       console.log("[v0] Account disconnected")
-      suiWallet.setConnectionState(false, null)
     }
   }, [currentAccount])
 
@@ -40,7 +38,7 @@ export default function HomePage() {
 
     setCreatingRoom(true)
     try {
-      console.log("[v0] Creating room with real SUI transaction...")
+      console.log("[v0] Creating room with modern SUI transaction...")
 
       const roomId = Math.random().toString(36).substr(2, 9)
       const betAmount = Number.parseFloat(newRoomBet)
@@ -49,7 +47,7 @@ export default function HomePage() {
         roomId,
         betAmount,
         currentAccount.address,
-        suiWallet.signAndExecuteTransactionBlock.bind(suiWallet),
+        signAndExecuteTransaction,
       )
 
       setRooms((prev) => [...prev, room])
@@ -71,12 +69,12 @@ export default function HomePage() {
 
     setJoiningRoom(true)
     try {
-      console.log("[v0] Joining room with real SUI transaction...")
+      console.log("[v0] Joining room with modern SUI transaction...")
 
       const room = await gameStateManager.joinRoom(
         joinRoomId,
         currentAccount.address,
-        suiWallet.signAndExecuteTransactionBlock.bind(suiWallet),
+        signAndExecuteTransaction,
       )
 
       setRooms((prev) => [...prev, room])

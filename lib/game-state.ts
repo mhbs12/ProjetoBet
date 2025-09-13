@@ -17,13 +17,40 @@ class GameStateManager {
   private listeners = new Map<string, ((room: GameRoom) => void)[]>()
 
   async createRoom(roomId: string, betAmount: number, creatorAddress: string, signAndExecute: any): Promise<GameRoom> {
-    console.log("[v0] Creating room with real SUI transaction")
+    console.log("[v0] Creating room with modern SUI transaction")
 
-    const result = await suiContract.createBettingRoom(creatorAddress, betAmount, signAndExecute)
+    // Create a promise that resolves when the transaction completes
+    const result = await new Promise<any>((resolve, reject) => {
+      try {
+        suiContract.createBettingRoom(creatorAddress, betAmount, (transactionData: any) => {
+          signAndExecute(
+            transactionData,
+            {
+              onSuccess: (result: any) => {
+                console.log("[v0] Transaction successful:", result)
+                
+                // Extract treasury object ID from transaction result
+                const treasuryObject = result.objectChanges?.find(
+                  (change: any) => change.type === "created" && change.objectType.includes("Treasury"),
+                )
 
-    if (!result.success) {
-      throw new Error(`Failed to create betting room: ${result.error}`)
-    }
+                resolve({
+                  success: true,
+                  treasuryId: treasuryObject?.objectId,
+                  transactionDigest: result.digest,
+                })
+              },
+              onError: (error: any) => {
+                console.error("[v0] Transaction failed:", error)
+                reject(new Error(`Failed to create betting room: ${error.message || error}`))
+              },
+            }
+          )
+        })
+      } catch (error) {
+        reject(new Error(`Failed to create betting room: ${error.message || error}`))
+      }
+    })
 
     const room: GameRoom = {
       id: roomId,
@@ -49,13 +76,32 @@ class GameStateManager {
     if (room.players.length >= 2) throw new Error("Room is full")
     if (!room.treasuryId) throw new Error("Treasury not found")
 
-    console.log("[v0] Joining room with real SUI transaction")
+    console.log("[v0] Joining room with modern SUI transaction")
 
-    const result = await suiContract.joinBettingRoom(room.treasuryId, room.betAmount, signAndExecute)
-
-    if (!result.success) {
-      throw new Error(`Failed to join betting room: ${result.error}`)
-    }
+    const result = await new Promise<any>((resolve, reject) => {
+      try {
+        suiContract.joinBettingRoom(room.treasuryId!, room.betAmount, (transactionData: any) => {
+          signAndExecute(
+            transactionData,
+            {
+              onSuccess: (result: any) => {
+                console.log("[v0] Join transaction successful:", result)
+                resolve({
+                  success: true,
+                  transactionDigest: result.digest,
+                })
+              },
+              onError: (error: any) => {
+                console.error("[v0] Join transaction failed:", error)
+                reject(new Error(`Failed to join betting room: ${error.message || error}`))
+              },
+            }
+          )
+        })
+      } catch (error) {
+        reject(new Error(`Failed to join betting room: ${error.message || error}`))
+      }
+    })
 
     room.players.push(playerAddress)
     room.gameState = "playing"
@@ -71,17 +117,40 @@ class GameStateManager {
     const room = this.rooms.get(roomId)
     if (!room || !room.treasuryId) return
 
-    console.log("[v0] Finishing game with real prize distribution")
+    console.log("[v0] Finishing game with modern prize distribution")
 
     if (winner) {
-      const result = await suiContract.finishGame(room.treasuryId, winner, signAndExecute)
+      try {
+        const result = await new Promise<any>((resolve, reject) => {
+          try {
+            suiContract.finishGame(room.treasuryId!, winner, (transactionData: any) => {
+              signAndExecute(
+                transactionData,
+                {
+                  onSuccess: (result: any) => {
+                    console.log("[v0] Finish game transaction successful:", result)
+                    resolve({
+                      success: true,
+                      transactionDigest: result.digest,
+                    })
+                  },
+                  onError: (error: any) => {
+                    console.error("[v0] Finish game transaction failed:", error)
+                    reject(new Error(`Failed to finish game: ${error.message || error}`))
+                  },
+                }
+              )
+            })
+          } catch (error) {
+            reject(new Error(`Failed to finish game: ${error.message || error}`))
+          }
+        })
 
-      if (result.success) {
         room.winner = winner
         room.gameState = "finished"
         console.log("[v0] Prize distributed to winner:", winner)
-      } else {
-        console.error("[v0] Failed to distribute prize:", result.error)
+      } catch (error) {
+        console.error("[v0] Failed to distribute prize:", error)
       }
     }
 

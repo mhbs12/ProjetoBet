@@ -21,9 +21,9 @@ export class SuiGameContract {
     return true
   }
 
-  async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteTransaction: any) {
+  async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteCallback: any) {
     if (!this.validateContract()) {
-      return { success: false, error: "Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID." }
+      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID.")
     }
 
     try {
@@ -36,33 +36,25 @@ export class SuiGameContract {
         arguments: [coin],
       })
 
-      const result = await signAndExecuteTransaction({
+      // Call the callback with the transaction object for modern dapp-kit
+      const transactionData = {
         transaction: tx,
         options: {
           showEffects: true,
           showObjectChanges: true,
         },
-      })
-
-      // Extract treasury object ID from transaction result
-      const treasuryObject = result.objectChanges?.find(
-        (change: any) => change.type === "created" && change.objectType.includes("Treasury"),
-      )
-
-      return {
-        success: true,
-        treasuryId: treasuryObject?.objectId,
-        transactionDigest: result.digest,
       }
+
+      return signAndExecuteCallback(transactionData)
     } catch (error) {
       console.error("Error creating betting room:", error)
-      return { success: false, error: error.message }
+      throw error
     }
   }
 
-  async joinBettingRoom(treasuryId: string, betAmount: number, signAndExecuteTransaction: any) {
+  async joinBettingRoom(treasuryId: string, betAmount: number, signAndExecuteCallback: any) {
     if (!this.validateContract()) {
-      return { success: false, error: "Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID." }
+      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID.")
     }
 
     try {
@@ -75,26 +67,24 @@ export class SuiGameContract {
         arguments: [treasuryId, coin],
       })
 
-      const result = await signAndExecuteTransaction({
+      // Call the callback with the transaction object for modern dapp-kit
+      const transactionData = {
         transaction: tx,
         options: {
           showEffects: true,
         },
-      })
-
-      return {
-        success: true,
-        transactionDigest: result.digest,
       }
+
+      return signAndExecuteCallback(transactionData)
     } catch (error) {
       console.error("Error joining betting room:", error)
-      return { success: false, error: error.message }
+      throw error
     }
   }
 
-  async finishGame(treasuryId: string, winnerAddress: string, signAndExecuteTransaction: any) {
+  async finishGame(treasuryId: string, winnerAddress: string, signAndExecuteCallback: any) {
     if (!this.validateContract()) {
-      return { success: false, error: "Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID." }
+      throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID.")
     }
 
     try {
@@ -105,20 +95,18 @@ export class SuiGameContract {
         arguments: [winnerAddress, treasuryId],
       })
 
-      const result = await signAndExecuteTransaction({
+      // Call the callback with the transaction object for modern dapp-kit
+      const transactionData = {
         transaction: tx,
         options: {
           showEffects: true,
         },
-      })
-
-      return {
-        success: true,
-        transactionDigest: result.digest,
       }
+
+      return signAndExecuteCallback(transactionData)
     } catch (error) {
       console.error("Error finishing game:", error)
-      return { success: false, error: error.message }
+      throw error
     }
   }
 
