@@ -327,6 +327,43 @@ export class SuiGameContract {
     
     return null
   }
+
+  async getTreasuryFromTransaction(transactionDigest: string) {
+    try {
+      console.log(`[v0] Retrieving treasury ID from transaction:`, transactionDigest)
+      
+      const transaction = await this.client.getTransactionBlock({
+        digest: transactionDigest,
+        options: { showObjectChanges: true },
+      })
+
+      if (transaction.objectChanges) {
+        // Try multiple approaches to find the treasury object
+        let treasuryObject = transaction.objectChanges.find(
+          (change: any) => change.type === "created" && change.objectType && 
+          (change.objectType.includes("Treasury") || change.objectType.includes("treasury"))
+        )
+        
+        // Fallback: look for any created object that might be the treasury
+        if (!treasuryObject) {
+          treasuryObject = transaction.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectId
+          )
+        }
+        
+        if (treasuryObject?.objectId) {
+          console.log(`[v0] Treasury ID found in transaction:`, treasuryObject.objectId)
+          return treasuryObject.objectId
+        }
+      }
+      
+      console.warn(`[v0] No treasury object found in transaction:`, transactionDigest)
+      return null
+    } catch (error) {
+      console.error(`[v0] Error retrieving treasury from transaction:`, error)
+      return null
+    }
+  }
 }
 
 export const suiContract = new SuiGameContract()
