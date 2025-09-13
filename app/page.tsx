@@ -83,6 +83,7 @@ export default function HomePage() {
         treasuryId: "0x123abc",
         betAmount: 1.0,
         players: ["0xplayer1"],
+        playersPresent: [], // Creator not present initially to demonstrate the requirement
         gameState: "waiting" as const,
         board: Array(9).fill(null),
         currentPlayer: "0xplayer1",
@@ -94,6 +95,7 @@ export default function HomePage() {
         treasuryId: "0x456def",
         betAmount: 0.1,
         players: ["0xplayer2"],
+        playersPresent: ["0xplayer2"], // This creator is present
         gameState: "waiting" as const,
         board: Array(9).fill(null),
         currentPlayer: "0xplayer2",
@@ -105,6 +107,7 @@ export default function HomePage() {
         treasuryId: "0x789ghi",
         betAmount: 0.5,
         players: ["0xplayer3"],
+        playersPresent: [], // Creator not present initially
         gameState: "waiting" as const,
         board: Array(9).fill(null),
         currentPlayer: "0xplayer3",
