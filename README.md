@@ -44,7 +44,7 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
 
 5. **Connect Wallet & Play**
    - Install [SUI Wallet](https://chrome.google.com/webstore/detail/sui-wallet/opcgpfmipidbgpenhmajoajpbobppdil)
-   - Get testnet SUI from [Discord faucet](https://discord.gg/sui)
+   - Get devnet SUI from [Discord faucet](https://discord.gg/sui) or [Devnet Faucet](https://faucet.devnet.sui.io/)
    - Create room, invite friend, play & win!
 
 ## How It Works
@@ -100,11 +100,11 @@ If you're experiencing transaction failures when creating or joining betting roo
 
 2. **"Insufficient SUI balance"**
    - Make sure your wallet has enough SUI for both the bet amount and gas fees
-   - Use the testnet faucet to get more SUI: https://discord.gg/sui
+   - Use the devnet faucet to get more SUI: https://faucet.devnet.sui.io/ or https://discord.gg/sui
 
 3. **"Transaction failed" or wallet errors**
    - Check that your wallet is properly connected
-   - Ensure you're on the correct network (testnet/mainnet)
+   - Ensure you're on the correct network (devnet)
    - Try refreshing the page and reconnecting your wallet
 
 4. **Room creation fails**

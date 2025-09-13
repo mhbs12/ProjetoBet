@@ -13,9 +13,10 @@
    sui client switch --address <your-address>
    \`\`\`
 
-3. **Get Testnet SUI**
+3. **Get Devnet SUI**
    - Visit: https://discord.gg/sui
-   - Use `!faucet <your-address>` in #testnet-faucet channel
+   - Use `!faucet <your-address>` in #devnet-faucet channel
+   - Alternative: Use the devnet faucet at https://faucet.devnet.sui.io/
 
 ## Deploy Your Smart Contract
 
@@ -23,8 +24,9 @@
    - Use your existing Move contract with functions: `criar_aposta`, `entrar_aposta`, `finish_game`
    - Ensure the module name is `teste2` as expected by the frontend
 
-2. **Deploy to Testnet**
+2. **Deploy to Devnet**
    \`\`\`bash
+   sui client switch --env devnet
    sui client publish --gas-budget 20000000
    \`\`\`
 
@@ -41,7 +43,10 @@
 
 2. **Network Configuration**
    \`\`\`bash
-   # For testnet (default)
+   # For devnet (default)
+   NEXT_PUBLIC_SUI_NETWORK=devnet
+   
+   # For testnet
    NEXT_PUBLIC_SUI_NETWORK=testnet
    
    # For mainnet (production)
@@ -59,8 +64,8 @@
    - Click "Connect Wallet"
    - Approve connection in wallet extension
 
-3. **Get Testnet SUI**
-   - Use Discord faucet or testnet faucet website
+3. **Get Devnet SUI**
+   - Use Discord faucet or devnet faucet website
    - Ensure you have at least 1 SUI for testing
 
 4. **Create and Play**
@@ -131,7 +136,7 @@ localStorage.setItem('debug', 'sui:*')
 
 ## Security Considerations
 
-1. **Testnet Only**: Current configuration is for testnet only
+1. **Devnet Configuration**: Current configuration is for devnet - suitable for development and testing
 2. **Smart Contract Audit**: Audit contract before mainnet deployment
 3. **Private Keys**: Never share private keys or seed phrases
 4. **Gas Limits**: Set appropriate gas limits for transactions
