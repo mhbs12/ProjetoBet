@@ -15,6 +15,41 @@ export interface GameRoom {
 class GameStateManager {
   private rooms = new Map<string, GameRoom>()
   private listeners = new Map<string, ((room: GameRoom) => void)[]>()
+  private readonly STORAGE_KEY = 'game-rooms'
+
+  constructor() {
+    this.loadRoomsFromStorage()
+  }
+
+  private loadRoomsFromStorage(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY)
+      if (stored) {
+        const roomsData = JSON.parse(stored)
+        Object.entries(roomsData).forEach(([id, room]) => {
+          this.rooms.set(id, room as GameRoom)
+        })
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to load rooms from storage:', error)
+    }
+  }
+
+  private saveRoomsToStorage(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const roomsData: Record<string, GameRoom> = {}
+      this.rooms.forEach((room, id) => {
+        roomsData[id] = room
+      })
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(roomsData))
+    } catch (error) {
+      console.warn('[v0] Failed to save rooms to storage:', error)
+    }
+  }
 
   async createRoom(roomId: string, betAmount: number, creatorAddress: string, signAndExecute: any): Promise<GameRoom> {
     console.log("[v0] Creating room with modern SUI transaction")
@@ -64,6 +99,7 @@ class GameStateManager {
     }
 
     this.rooms.set(roomId, room)
+    this.saveRoomsToStorage()
     this.notifyListeners(roomId, room)
 
     console.log("[v0] Room created successfully with treasury:", result.treasuryId)
@@ -107,6 +143,7 @@ class GameStateManager {
     room.gameState = "playing"
 
     this.rooms.set(roomId, room)
+    this.saveRoomsToStorage()
     this.notifyListeners(roomId, room)
 
     console.log("[v0] Player joined successfully")
@@ -155,6 +192,7 @@ class GameStateManager {
     }
 
     this.rooms.set(roomId, room)
+    this.saveRoomsToStorage()
     this.notifyListeners(roomId, room)
   }
 
@@ -180,6 +218,7 @@ class GameStateManager {
     }
 
     this.rooms.set(roomId, room)
+    this.saveRoomsToStorage()
     this.notifyListeners(roomId, room)
     return room
   }
