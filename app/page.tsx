@@ -12,10 +12,11 @@ import { suiWallet } from "@/lib/sui-wallet"
 import { gameStateManager } from "@/lib/game-state"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useCurrentAccount } from "@mysten/dapp-kit"
 
 export default function HomePage() {
   const router = useRouter()
-  const [walletConnected, setWalletConnected] = useState(false)
+  const currentAccount = useCurrentAccount()
   const [rooms, setRooms] = useState<any[]>([])
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomBet, setNewRoomBet] = useState("0.1")
@@ -23,25 +24,14 @@ export default function HomePage() {
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [joiningRoom, setJoiningRoom] = useState(false)
 
+  // Update the sui-wallet state when currentAccount changes
   useEffect(() => {
-    const checkWallet = async () => {
-      const connectedAccount = await suiWallet.getConnectedAccount()
-      if (connectedAccount) {
-        suiWallet.setConnectionState(true, connectedAccount)
-      }
-
-      const walletState = suiWallet.getState()
-      setWalletConnected(walletState.connected)
+    if (currentAccount?.address) {
+      suiWallet.setConnectionState(true, currentAccount.address)
+    } else {
+      suiWallet.setConnectionState(false, null)
     }
-
-    checkWallet()
-    const interval = setInterval(() => {
-      const walletState = suiWallet.getState()
-      setWalletConnected(walletState.connected)
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [])
+  }, [currentAccount])
 
   const createRoom = async () => {
     if (!newRoomName.trim() || !newRoomBet) return
@@ -106,7 +96,7 @@ export default function HomePage() {
     }
   }
 
-  if (!walletConnected) {
+  if (!currentAccount) {
     return (
       <main className="min-h-screen bg-background p-4">
         <div className="max-w-4xl mx-auto">
