@@ -10,21 +10,22 @@ import { WalletConnect } from "@/components/wallet-connect"
 import { ArrowLeft, Coins, Users, Clock, Loader2 } from "lucide-react"
 import { gameStateManager } from "@/lib/game-state"
 import type { GameRoom } from "@/lib/game-state"
-import { suiWallet } from "@/lib/sui-wallet"
+import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit"
 import Link from "next/link"
 
 export default function GamePage() {
   const params = useParams()
   const router = useRouter()
   const roomId = params.roomId as string
+  const currentAccount = useCurrentAccount()
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
 
   const [room, setRoom] = useState<GameRoom | null>(null)
   const [playerSymbol, setPlayerSymbol] = useState<"X" | "O">("X")
   const [finishingGame, setFinishingGame] = useState(false)
 
   useEffect(() => {
-    const walletState = suiWallet.getState()
-    if (!walletState.connected) {
+    if (!currentAccount) {
       router.push("/")
       return
     }
@@ -33,7 +34,7 @@ export default function GamePage() {
     if (currentRoom) {
       setRoom(currentRoom)
       // Determine player symbol based on address
-      const isPlayerX = currentRoom.players[0] === walletState.address
+      const isPlayerX = currentRoom.players[0] === currentAccount.address
       setPlayerSymbol(isPlayerX ? "X" : "O")
     }
 
@@ -49,17 +50,16 @@ export default function GamePage() {
     })
 
     return unsubscribe
-  }, [roomId, router])
+  }, [roomId, router, currentAccount])
 
   const handleGameFinish = async (gameRoom: GameRoom) => {
-    const walletState = suiWallet.getState()
-    if (!walletState.signAndExecuteTransactionBlock || !gameRoom.winner) return
+    if (!currentAccount || !gameRoom.winner) return
 
     setFinishingGame(true)
     try {
       console.log("[v0] Finishing game and distributing prize...")
 
-      await gameStateManager.finishGame(roomId, gameRoom.winner, walletState.signAndExecuteTransactionBlock)
+      await gameStateManager.finishGame(roomId, gameRoom.winner, signAndExecuteTransaction)
 
       console.log("[v0] Prize distributed successfully!")
     } catch (error) {
@@ -70,12 +70,11 @@ export default function GamePage() {
   }
 
   const handleMove = (position: number) => {
-    const walletState = suiWallet.getState()
-    if (!room || !walletState.address) return
+    if (!room || !currentAccount) return
 
     console.log("[v0] Making move at position:", position)
 
-    const updatedRoom = gameStateManager.makeMove(roomId, position, walletState.address)
+    const updatedRoom = gameStateManager.makeMove(roomId, position, currentAccount.address)
     if (updatedRoom) {
       setRoom(updatedRoom)
     }
@@ -96,7 +95,7 @@ export default function GamePage() {
 
   const isWaitingForPlayer = room.gameState === "waiting"
   const isGameOver = room.gameState === "finished"
-  const walletAddress = suiWallet.getState().address
+  const walletAddress = currentAccount?.address
   const isWinner = room.winner === walletAddress
   const isDraw = room.winner === null && isGameOver
 
