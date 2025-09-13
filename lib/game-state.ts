@@ -106,17 +106,42 @@ class GameStateManager {
     return room
   }
 
-  async joinRoom(roomId: string, playerAddress: string, signAndExecute: any): Promise<GameRoom> {
-    const room = this.rooms.get(roomId)
+  async joinRoom(roomId: string, playerAddress: string, signAndExecute: any, treasuryId?: string): Promise<GameRoom> {
+    let room = this.rooms.get(roomId)
+    
+    // If room doesn't exist locally but we have a treasury ID, get info from blockchain
+    if (!room && treasuryId) {
+      console.log("[v0] Getting treasury info from blockchain:", treasuryId)
+      try {
+        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
+        if (treasuryInfo) {
+          room = {
+            id: roomId,
+            treasuryId: treasuryId,
+            betAmount: treasuryInfo.betAmount,
+            players: [], // We don't know the first player address without blockchain query
+            gameState: "waiting",
+            board: Array(9).fill(null),
+            currentPlayer: "", // This will be set when game starts
+          }
+          console.log("[v0] Created room from treasury info:", treasuryInfo)
+        }
+      } catch (error) {
+        console.error("[v0] Failed to get treasury info:", error)
+      }
+    }
+    
     if (!room) throw new Error("Room not found")
     if (room.players.length >= 2) throw new Error("Room is full")
-    if (!room.treasuryId) throw new Error("Treasury not found")
+    
+    const effectiveTreasuryId = treasuryId || room.treasuryId
+    if (!effectiveTreasuryId) throw new Error("Treasury not found")
 
-    console.log("[v0] Joining room with modern SUI transaction")
+    console.log("[v0] Joining room with modern SUI transaction, treasury:", effectiveTreasuryId)
 
     const result = await new Promise<any>((resolve, reject) => {
       try {
-        suiContract.joinBettingRoom(room.treasuryId!, room.betAmount, (transactionData: any) => {
+        suiContract.joinBettingRoom(effectiveTreasuryId!, room.betAmount, (transactionData: any) => {
           signAndExecute(
             transactionData,
             {
@@ -138,6 +163,11 @@ class GameStateManager {
         reject(new Error(`Failed to join betting room: ${error.message || error}`))
       }
     })
+
+    // Update the room with the treasury ID if it wasn't set before
+    if (!room.treasuryId && effectiveTreasuryId) {
+      room.treasuryId = effectiveTreasuryId
+    }
 
     room.players.push(playerAddress)
     room.gameState = "playing"
@@ -265,6 +295,20 @@ class GameStateManager {
   private notifyListeners(roomId: string, room: GameRoom): void {
     const callbacks = this.listeners.get(roomId) || []
     callbacks.forEach((callback) => callback(room))
+  }
+
+  // Helper method to create a shareable room URL with treasury ID
+  generateRoomShareUrl(roomId: string, treasuryId: string, baseUrl?: string): string {
+    const base = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '')
+    return `${base}/game/${roomId}?treasury=${treasuryId}`
+  }
+
+  // Helper method to extract treasury ID from URL parameters
+  extractTreasuryFromUrl(): string | null {
+    if (typeof window === 'undefined') return null
+    
+    const urlParams = new URLSearchParams(window.location.search)
+    return urlParams.get('treasury')
   }
 }
 

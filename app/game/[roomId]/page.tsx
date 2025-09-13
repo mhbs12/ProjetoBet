@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { GameBoard } from "@/components/game-board"
 import { WalletConnect } from "@/components/wallet-connect"
-import { ArrowLeft, Coins, Users, Clock, Loader2 } from "lucide-react"
+import { ArrowLeft, Coins, Users, Clock, Loader2, Copy } from "lucide-react"
 import { gameStateManager } from "@/lib/game-state"
 import type { GameRoom } from "@/lib/game-state"
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit"
@@ -16,13 +16,17 @@ import Link from "next/link"
 export default function GamePage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const roomId = params.roomId as string
+  const treasuryId = searchParams.get('treasury')
   const currentAccount = useCurrentAccount()
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
 
   const [room, setRoom] = useState<GameRoom | null>(null)
   const [playerSymbol, setPlayerSymbol] = useState<"X" | "O">("X")
   const [finishingGame, setFinishingGame] = useState(false)
+  const [attemptingJoin, setAttemptingJoin] = useState(false)
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false)
 
   useEffect(() => {
     if (!currentAccount) {
@@ -36,6 +40,11 @@ export default function GamePage() {
       // Determine player symbol based on address
       const isPlayerX = currentRoom.players[0] === currentAccount.address
       setPlayerSymbol(isPlayerX ? "X" : "O")
+    } else if (treasuryId) {
+      // If no local room but we have treasury ID from URL, attempt to join
+      console.log("[v0] No local room found but treasury ID provided, attempting to join...")
+      setAttemptingJoin(true)
+      handleAutoJoin()
     }
 
     // Subscribe to room updates
@@ -50,7 +59,41 @@ export default function GamePage() {
     })
 
     return unsubscribe
-  }, [roomId, router, currentAccount])
+  }, [roomId, router, currentAccount, treasuryId])
+
+  const handleAutoJoin = async () => {
+    if (!currentAccount || !treasuryId) return
+
+    try {
+      console.log("[v0] Auto-joining room with treasury ID:", treasuryId)
+      const joinedRoom = await gameStateManager.joinRoom(
+        roomId,
+        currentAccount.address,
+        signAndExecuteTransaction,
+        treasuryId
+      )
+
+      setRoom(joinedRoom)
+      // The joining player is always "O" since they're the second player
+      setPlayerSymbol("O")
+    } catch (error) {
+      console.error("[v0] Failed to auto-join room:", error)
+      alert(`Failed to join room: ${error.message}`)
+      router.push("/")
+    } finally {
+      setAttemptingJoin(false)
+    }
+  }
+
+  const copyShareLink = () => {
+    if (!room?.treasuryId) return
+    
+    const shareUrl = gameStateManager.generateRoomShareUrl(room.id, room.treasuryId, typeof window !== 'undefined' ? window.location.origin : '')
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopiedToClipboard(true)
+      setTimeout(() => setCopiedToClipboard(false), 2000)
+    })
+  }
 
   const handleGameFinish = async (gameRoom: GameRoom) => {
     if (!currentAccount || !gameRoom.winner) return
@@ -86,7 +129,12 @@ export default function GamePage() {
         <Card>
           <CardContent className="p-6 text-center">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-            <p>Loading game...</p>
+            <p>{attemptingJoin ? "Joining room..." : "Loading game..."}</p>
+            {treasuryId && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Treasury: {treasuryId.slice(0, 8)}...{treasuryId.slice(-4)}
+              </p>
+            )}
           </CardContent>
         </Card>
       </main>
@@ -119,10 +167,27 @@ export default function GamePage() {
                 <CardContent className="p-8 text-center">
                   <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-pulse" />
                   <h3 className="text-xl font-semibold mb-2">Waiting for Opponent</h3>
-                  <p className="text-muted-foreground mb-4">Share your room ID with a friend to start playing!</p>
-                  <div className="bg-muted p-3 rounded-lg">
-                    <p className="text-sm text-muted-foreground mb-1">Room ID:</p>
-                    <p className="font-mono text-lg font-bold">{room.id}</p>
+                  <p className="text-muted-foreground mb-4">Share this link with a friend to start playing!</p>
+                  <div className="bg-muted p-3 rounded-lg mb-4">
+                    <p className="text-sm text-muted-foreground mb-1">Share this link:</p>
+                    {room.treasuryId ? (
+                      <div className="space-y-2">
+                        <p className="font-mono text-sm break-all">
+                          {gameStateManager.generateRoomShareUrl(room.id, room.treasuryId, typeof window !== 'undefined' ? window.location.origin : '')}
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={copyShareLink}
+                          className="w-full"
+                        >
+                          <Copy className="w-4 h-4 mr-2" />
+                          {copiedToClipboard ? "Copied!" : "Copy Link"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="font-mono text-lg font-bold">{room.id}</p>
+                    )}
                   </div>
                   {room.treasuryId && (
                     <div className="mt-4 p-3 bg-muted rounded-lg">
