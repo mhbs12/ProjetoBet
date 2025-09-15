@@ -46,6 +46,26 @@ export default function HomePage() {
     router.push(`/game/${roomId}?treasury=${treasuryId}`)
   }
 
+  // Auto-enter room after successful creation - addresses the first issue
+  const handleRoomCreated = (room: GameRoom) => {
+    if (room.treasuryId) {
+      // If we have a treasury ID, show the dialog first, then auto-enter
+      setCreatedTreasuryId(room.treasuryId)
+      setShowTreasuryDialog(true)
+      
+      // Auto-close dialog and enter room after 3 seconds to allow user to copy ID
+      setTimeout(() => {
+        if (showTreasuryDialog) {
+          enterMyRoom(room.id, room.treasuryId!)
+        }
+      }, 3000)
+    } else {
+      // If no treasury ID, go directly to the room with a warning
+      console.warn("[v0] Entering room without Treasury ID")
+      router.push(`/game/${room.id}`)
+    }
+  }
+
   // Check if contract is properly configured
   useEffect(() => {
     const packageId = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
@@ -177,11 +197,8 @@ export default function HomePage() {
         signAndExecuteTransaction,
       )
       
-      // Show treasury ID prominently to user
-      if (room.treasuryId) {
-        setCreatedTreasuryId(room.treasuryId)
-        setShowTreasuryDialog(true)
-      }
+      // Handle room creation and auto-entry
+      handleRoomCreated(room)
       
       setNewRoomName("")
       setNewRoomBet("0.1")
@@ -189,8 +206,6 @@ export default function HomePage() {
       loadMyRooms()
 
       console.log("[v0] Room created successfully with Treasury ID:", room.treasuryId)
-      
-      // Don't automatically redirect - let user copy treasury ID first
     } catch (error) {
       console.error("[v0] Failed to create room:", error)
       alert(`Failed to create room: ${error.message}`)
@@ -474,7 +489,7 @@ export default function HomePage() {
                     Creating Room...
                   </>
                 ) : (
-                  "Create Room & Enter"
+                  "Create Room & Enter Automatically"
                 )}
               </Button>
               {!isContractConfigured && (
@@ -736,7 +751,7 @@ export default function HomePage() {
               Room Created Successfully!
             </DialogTitle>
             <DialogDescription>
-              Your room has been created on the blockchain. Share this Treasury ID with your opponent to let them join:
+              Your room has been created on the blockchain. You will automatically enter the room in a few seconds, but you can share this Treasury ID with your opponent first:
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

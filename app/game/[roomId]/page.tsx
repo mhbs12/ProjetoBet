@@ -298,7 +298,20 @@ export default function GamePage() {
                           </p>
                         </div>
                       ) : (
-                        <p className="text-sm text-amber-600 font-medium">Treasury ID not available - room cannot be joined by others</p>
+                        <div className="text-sm">
+                          <p className="text-amber-600 font-medium mb-2">⚠️ Treasury ID not available</p>
+                          <p className="text-xs text-muted-foreground">
+                            This room was created without a blockchain treasury. This may happen if:
+                          </p>
+                          <ul className="text-xs text-muted-foreground mt-1 space-y-1">
+                            <li>• Smart contract is not properly configured</li>
+                            <li>• Transaction failed during room creation</li>
+                            <li>• Network connectivity issues</li>
+                          </ul>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            You can still play, but betting functionality will be limited.
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}

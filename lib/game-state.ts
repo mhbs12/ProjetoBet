@@ -309,13 +309,23 @@ class GameStateManager {
       let treasuryObject = null
       
       if (result.objectChanges) {
-        // First try: look for Treasury type
+        // First try: look for Treasury type (case insensitive)
         treasuryObject = result.objectChanges.find(
           (change: any) => change.type === "created" && change.objectType && 
-          (change.objectType.includes("Treasury") || change.objectType.includes("treasury"))
+          (change.objectType.toLowerCase().includes("treasury") || 
+           change.objectType.includes("::bet::") ||
+           change.objectType.includes("Treasury"))
         )
         
-        // Second try: look for any created object that might be the treasury
+        // Second try: look for objects created by the bet module
+        if (!treasuryObject) {
+          treasuryObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectType &&
+            change.objectType.includes("::bet::")
+          )
+        }
+        
+        // Third try: look for any created object that might be the treasury
         if (!treasuryObject) {
           treasuryObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId
@@ -355,6 +365,12 @@ class GameStateManager {
         console.warn("[v0] Warning: Treasury object ID not found in transaction result. Room created but may have issues with betting.")
         console.warn("[v0] This could be due to smart contract returning different object types than expected.")
         console.warn("[v0] Room will be created but treasury functionality may be limited.")
+        console.warn("[v0] Available object changes:", JSON.stringify(result.objectChanges, null, 2))
+        
+        // For development/testing, we'll still create the room but warn users
+        if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+          console.warn("[v0] Development mode: Room created without Treasury ID - this will limit betting functionality")
+        }
       }
 
       console.log("[v0] Room created successfully with treasury:", treasuryObject?.objectId)
