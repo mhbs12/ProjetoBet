@@ -15,6 +15,43 @@ export interface SimpleRoom {
 class SimpleRoomManager {
   private rooms = new Map<string, SimpleRoom>()
   private listeners = new Map<string, ((room: SimpleRoom) => void)[]>()
+  private readonly STORAGE_KEY = 'simple-game-rooms'
+
+  constructor() {
+    this.loadRoomsFromStorage()
+  }
+
+  private loadRoomsFromStorage(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const stored = localStorage.getItem(this.STORAGE_KEY)
+      if (stored) {
+        const roomsData = JSON.parse(stored)
+        Object.entries(roomsData).forEach(([id, room]) => {
+          this.rooms.set(id, room as SimpleRoom)
+        })
+        console.log('[SimpleRoomManager] Loaded rooms from storage:', Object.keys(roomsData).length)
+      }
+    } catch (error) {
+      console.warn('[SimpleRoomManager] Failed to load rooms from storage:', error)
+    }
+  }
+
+  private saveRoomsToStorage(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const roomsData: Record<string, SimpleRoom> = {}
+      this.rooms.forEach((room, id) => {
+        roomsData[id] = room
+      })
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(roomsData))
+      console.log('[SimpleRoomManager] Saved rooms to storage')
+    } catch (error) {
+      console.warn('[SimpleRoomManager] Failed to save rooms to storage:', error)
+    }
+  }
 
   /**
    * Create a new room by calling the blockchain contract
@@ -127,6 +164,7 @@ class SimpleRoomManager {
 
       // Store the room using treasury ID as the key
       this.rooms.set(treasuryId, room)
+      this.saveRoomsToStorage()
       this.notifyListeners(treasuryId, room)
 
       console.log("[v0] Room created successfully with treasury ID:", treasuryId)
@@ -212,12 +250,14 @@ class SimpleRoomManager {
         
         // Update the room immediately and broadcast the state change
         this.rooms.set(treasuryId, room)
+        this.saveRoomsToStorage()
         this.notifyListeners(treasuryId, room)
         
         console.log("[v0] Game started! Broadcasting room state to all players")
       } else {
         // Update the room for single player case
         this.rooms.set(treasuryId, room)
+        this.saveRoomsToStorage()
         this.notifyListeners(treasuryId, room)
       }
 
@@ -277,6 +317,7 @@ class SimpleRoomManager {
     }
 
     this.rooms.set(treasuryId, room)
+    this.saveRoomsToStorage()
     this.notifyListeners(treasuryId, room)
     
     return room
@@ -306,6 +347,7 @@ class SimpleRoomManager {
     }
 
     this.rooms.set(treasuryId, room)
+    this.saveRoomsToStorage()
     this.notifyListeners(treasuryId, room)
   }
 
