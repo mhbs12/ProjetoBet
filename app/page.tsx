@@ -281,9 +281,12 @@ export default function HomePage() {
           <div className="flex flex-col items-center gap-4 mb-8">
             <WalletConnect />
             <Link href="/mint-og-nft">
-              <Button variant="outline" className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Mint OG NFT
+              <Button 
+                size="lg"
+                className="bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-700 hover:via-pink-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 font-bold px-8 py-4 text-lg border-0"
+              >
+                <Sparkles className="w-5 h-5 mr-2 animate-pulse" />
+                🎁 Mint FREE OG NFT 🎁
               </Button>
             </Link>
           </div>
@@ -369,9 +372,12 @@ export default function HomePage() {
           <div className="flex flex-col items-center gap-4 mb-8">
             <WalletConnect />
             <Link href="/mint-og-nft">
-              <Button variant="outline" className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Mint OG NFT
+              <Button 
+                size="lg"
+                className="bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-700 hover:via-pink-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 font-bold px-8 py-4 text-lg border-0"
+              >
+                <Sparkles className="w-5 h-5 mr-2 animate-pulse" />
+                🎁 Mint FREE OG NFT 🎁
               </Button>
             </Link>
           </div>

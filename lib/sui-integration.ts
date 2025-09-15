@@ -84,11 +84,11 @@ export class SuiGameContract {
 
       // Call the move function with correct arguments: SUI object and bet amount
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::teste2::criar_aposta`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::criar_aposta`,
         arguments: [coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::criar_aposta with coin and amount ${amountInMist}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::criar_aposta with coin and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       // The signAndExecuteTransaction is a mutate function that returns a promise
@@ -161,11 +161,11 @@ export class SuiGameContract {
 
       // Call the move function with correct arguments order: treasury first (by reference), then coin, then amount
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::entrar_aposta`,
         arguments: [tx.object(treasuryId), coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::teste2::entrar_aposta with treasury ${treasuryId}, coin, and amount ${amountInMist}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::entrar_aposta with treasury ${treasuryId}, coin, and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       return new Promise((resolve, reject) => {
@@ -220,7 +220,7 @@ export class SuiGameContract {
 
       // Call the move function with correct arguments order: winner_address first, then treasury
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::teste2::finish_game`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::finish_game`,
         arguments: [tx.pure.address(winnerAddress), tx.object(treasuryId)],
       })
 
