@@ -84,11 +84,11 @@ export class SuiGameContract {
 
       // Call the correct move function as specified in requirements
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::bet::criar_sala`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::criar_aposta`,
         arguments: [coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::criar_sala with coin and amount ${amountInMist}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::criar_aposta with coin and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       // The signAndExecuteTransaction is a mutate function that returns a promise

@@ -141,6 +141,12 @@ export default function HomePage() {
 
           <div className="flex flex-col items-center gap-4 mb-8">
             <WalletConnect />
+            <Link href="/mint-og-nft">
+              <Button variant="outline" className="flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
+                Mint Free OG NFT
+              </Button>
+            </Link>
           </div>
 
           <div className="text-center py-8 text-muted-foreground">
@@ -160,6 +166,12 @@ export default function HomePage() {
 
           <div className="flex flex-col items-center gap-4 mb-8">
             <WalletConnect />
+            <Link href="/mint-og-nft">
+              <Button variant="outline" className="flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
+                Mint Free OG NFT
+              </Button>
+            </Link>
           </div>
 
           {!isContractConfigured && (
