@@ -1,7 +1,8 @@
 import { Transaction } from "@mysten/sui/transactions"
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client"
+import { SuiClient } from "@mysten/sui/client"
+import { getCurrentNetwork, getCurrentNetworkUrl, getNetworkInfo } from "@/lib/network-config"
 
-const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as "devnet" | "testnet" | "mainnet") || "devnet"
+const NETWORK = getCurrentNetwork()
 const CONTRACT_PACKAGE_ID = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
 const DEFAULT_GAS_BUDGET = parseInt(process.env.NEXT_PUBLIC_DEFAULT_GAS_BUDGET || "10000000") // 0.01 SUI default
 
@@ -9,12 +10,13 @@ export class SuiGameContract {
   private client: SuiClient
 
   constructor() {
-    this.client = new SuiClient({ url: getFullnodeUrl(NETWORK) })
+    this.client = new SuiClient({ url: getCurrentNetworkUrl() })
     
     // Log network configuration for debugging
     if (typeof window !== "undefined") {
-      console.log(`[v0] SUI Client initialized for network: ${NETWORK}`)
-      console.log(`[v0] SUI Client URL: ${getFullnodeUrl(NETWORK)}`)
+      const networkInfo = getNetworkInfo()
+      console.log(`[v0] SUI Client initialized for network: ${networkInfo.network}`)
+      console.log(`[v0] SUI Client URL: ${networkInfo.endpoint}`)
       console.log(`[v0] Contract Package ID: ${CONTRACT_PACKAGE_ID || 'NOT CONFIGURED'}`)
     }
   }
@@ -26,7 +28,7 @@ export class SuiGameContract {
         console.error("[v0] Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID in your environment variables.")
         console.error("[v0] Example: NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0x1234567890abcdef1234567890abcdef12345678")
         console.error(`[v0] Current network: ${NETWORK}`)
-        console.error(`[v0] Current SUI endpoint: ${getFullnodeUrl(NETWORK)}`)
+        console.error(`[v0] Current SUI endpoint: ${getCurrentNetworkUrl()}`)
       }
       return false
     }
@@ -34,11 +36,15 @@ export class SuiGameContract {
   }
 
   getNetworkInfo() {
+    const networkInfo = getNetworkInfo()
     return {
-      network: NETWORK,
-      endpoint: getFullnodeUrl(NETWORK),
+      network: networkInfo.network,
+      endpoint: networkInfo.endpoint,
       contractPackageId: CONTRACT_PACKAGE_ID,
-      gasbudget: DEFAULT_GAS_BUDGET
+      gasbudget: DEFAULT_GAS_BUDGET,
+      isTestnet: networkInfo.isTestnet,
+      isMainnet: networkInfo.isMainnet,
+      isDevnet: networkInfo.isDevnet,
     }
   }
 

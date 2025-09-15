@@ -5,9 +5,10 @@
  */
 
 import { Transaction } from "@mysten/sui/transactions"
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client"
+import { SuiClient } from "@mysten/sui/client"
+import { getCurrentNetwork, getCurrentNetworkUrl, getNetworkInfo } from "@/lib/network-config"
 
-const NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as "devnet" | "testnet" | "mainnet") || "devnet"
+const NETWORK = getCurrentNetwork()
 const OG_NFT_PACKAGE_ID = process.env.NEXT_PUBLIC_OG_NFT_PACKAGE_ID
 const DEFAULT_GAS_BUDGET = parseInt(process.env.NEXT_PUBLIC_DEFAULT_GAS_BUDGET || "10000000") // 0.01 SUI default
 
@@ -143,10 +144,14 @@ export function getMintStats() {
  * Get network and package info for debugging
  */
 export function getOGNFTInfo() {
+  const networkInfo = getNetworkInfo()
   return {
-    network: NETWORK,
-    endpoint: getFullnodeUrl(NETWORK),
+    network: networkInfo.network,
+    endpoint: networkInfo.endpoint,
     packageId: OG_NFT_PACKAGE_ID,
-    gasbudget: DEFAULT_GAS_BUDGET
+    gasbudget: DEFAULT_GAS_BUDGET,
+    isTestnet: networkInfo.isTestnet,
+    isMainnet: networkInfo.isMainnet,
+    isDevnet: networkInfo.isDevnet,
   }
 }

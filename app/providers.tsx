@@ -2,21 +2,24 @@
 
 import type React from "react"
 import { SuiClientProvider, WalletProvider } from "@mysten/dapp-kit"
-import { getFullnodeUrl } from "@mysten/sui/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { getCurrentNetwork, getNetworkConfig, logNetworkConfig } from "@/lib/network-config"
 
-const networks = {
-  devnet: { url: getFullnodeUrl("devnet") },
-  testnet: { url: getFullnodeUrl("testnet") },
-  mainnet: { url: getFullnodeUrl("mainnet") },
-}
-
+const networks = getNetworkConfig()
 const queryClient = new QueryClient()
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // Get the current network from environment variable
+  const currentNetwork = getCurrentNetwork()
+  
+  // Log network configuration for debugging
+  if (typeof window !== "undefined") {
+    logNetworkConfig()
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networks} defaultNetwork="devnet">
+      <SuiClientProvider networks={networks} defaultNetwork={currentNetwork}>
         <WalletProvider
           autoConnect={true}
           preferredWallets={["Slush Wallet", "Suiet Wallet", "Ethos Wallet", "Martian Wallet"]}
