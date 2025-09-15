@@ -5,6 +5,7 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
 ## Features
 
 - **Real SUI Integration**: Native blockchain betting with smart contracts
+- **Free OG NFT Minting**: Mint unlimited OG NFTs directly on SUI blockchain at no cost
 - **Secure Betting**: Cryptographic proof system ensures fair play
 - **Instant Payouts**: Automatic prize distribution to winners
 - **Room System**: Create or join betting rooms with custom stakes
@@ -26,16 +27,20 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
 3. **Configure Environment**
    ```bash
    cp .env.local.example .env.local
-   # Edit .env.local with your contract package ID
-   NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0xYOUR_PACKAGE_ID_HERE
+   # Edit .env.local with your contract package IDs
+   NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0xYOUR_BETTING_PACKAGE_ID_HERE
+   NEXT_PUBLIC_OG_NFT_PACKAGE_ID=0xYOUR_OG_NFT_PACKAGE_ID_HERE
    ```
 
-   **⚠️ Important**: The application will not work without a valid contract package ID. You must:
-   1. Deploy your smart contract to SUI network
-   2. Copy the package ID from the deployment output
-   3. Set it in the `.env.local` file
+   **⚠️ Important**: The application requires valid contract package IDs to work. You must:
+   1. Deploy your smart contracts to SUI network
+   2. Copy the package IDs from the deployment output
+   3. Set them in the `.env.local` file
    
-   Without this configuration, betting transactions will fail with an error.
+   - `NEXT_PUBLIC_CONTRACT_PACKAGE_ID`: For the betting/game functionality
+   - `NEXT_PUBLIC_OG_NFT_PACKAGE_ID`: For the free OG NFT minting functionality
+   
+   Without these configurations, transactions will fail with an error.
 
 4. **Run Application**
    \`\`\`bash
@@ -45,15 +50,20 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
 5. **Connect Wallet & Play**
    - Install [SUI Wallet](https://chrome.google.com/webstore/detail/sui-wallet/opcgpfmipidbgpenhmajoajpbobppdil)
    - Get devnet SUI from [Discord faucet](https://discord.gg/sui) or [Devnet Faucet](https://faucet.devnet.sui.io/)
-   - Create room, invite friend, play & win!
+   - Mint free OG NFTs at `/mint-og-nft`
+   - Create betting rooms, invite friends, play & win!
 
 ## How It Works
 
 ### Smart Contract Functions
 
+#### Betting Contracts
 1. **`criar_aposta`**: Creates a new betting room with treasury
 2. **`entrar_aposta`**: Allows second player to join and match bet
 3. **`finish_game`**: Distributes total prize to winner
+
+#### OG NFT Contract
+1. **`og_nft::mint`**: Mints free OG NFTs with unlimited supply (no rarity system)
 
 ### Game Flow
 
