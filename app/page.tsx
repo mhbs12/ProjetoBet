@@ -19,7 +19,6 @@ export default function HomePage() {
   const router = useRouter()
   const currentAccount = useCurrentAccount()
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
-  const [rooms, setRooms] = useState<any[]>([])
   const [availableRooms, setAvailableRooms] = useState<any[]>([])
   const [myRooms, setMyRooms] = useState<any[]>([])
   const [roomSearchQuery, setRoomSearchQuery] = useState("")
@@ -177,8 +176,6 @@ export default function HomePage() {
         currentAccount.address,
         signAndExecuteTransaction,
       )
-
-      setRooms((prev) => [...prev, room])
       
       // Show treasury ID prominently to user
       if (room.treasuryId) {
@@ -225,8 +222,6 @@ export default function HomePage() {
         joinTreasuryId.trim(),
         betAmount
       )
-
-      setRooms((prev) => [...prev, room])
       setJoinTreasuryId("")
       setJoinBetAmount("0.1")
       loadAvailableRooms()
@@ -275,8 +270,6 @@ export default function HomePage() {
         room.treasuryId,
         betAmount  // Pass the bet amount
       )
-
-      setRooms((prev) => [...prev, joinedRoom])
       loadAvailableRooms() // Refresh available rooms
       loadMyRooms() // Refresh my rooms
 
@@ -627,7 +620,7 @@ export default function HomePage() {
                     <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
                       <div className="flex-1">
                         <h4 className="font-semibold">{room.name}</h4>
-                        <p className="text-sm text-muted-foreground">Treasury: {room.treasuryId?.slice(0, 16)}...{room.treasuryId?.slice(-8)}</p>
+                        <p className="text-sm text-muted-foreground font-mono">Treasury: {room.treasuryId?.slice(0, 12)}...{room.treasuryId?.slice(-6)}</p>
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant="outline">
                             <Coins className="w-3 h-3 mr-1" />
@@ -690,7 +683,7 @@ export default function HomePage() {
                   <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
                     <div className="flex-1">
                       <h4 className="font-semibold">{room.name}</h4>
-                      <p className="text-sm text-muted-foreground">Treasury: {room.treasuryId?.slice(0, 16)}...{room.treasuryId?.slice(-8)}</p>
+                      <p className="text-sm text-muted-foreground font-mono">Treasury: {room.treasuryId?.slice(0, 12)}...{room.treasuryId?.slice(-6)}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <Badge variant="outline">
                           <Coins className="w-3 h-3 mr-1" />
@@ -733,40 +726,6 @@ export default function HomePage() {
           </Card>
         )}
 
-        {rooms.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Rooms</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {rooms.map((room) => (
-                  <div key={room.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-semibold">{room.name || `Room ${room.id}`}</h4>
-                      <p className="text-sm text-muted-foreground">Room ID: {room.id}</p>
-                      {room.treasuryId && (
-                        <p className="text-xs text-muted-foreground">Treasury: {room.treasuryId.slice(0, 8)}...</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline">
-                          <Coins className="w-3 h-3 mr-1" />
-                          {room.betAmount} SUI
-                        </Badge>
-                        <Badge variant={room.gameState === "playing" ? "default" : "secondary"}>{room.gameState}</Badge>
-                      </div>
-                    </div>
-                    <Link href={`/game/${room.id}`}>
-                      <Button>{room.gameState === "waiting" ? "Enter Room" : "Continue Game"}</Button>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
       {/* Treasury ID Success Dialog */}
       <Dialog open={showTreasuryDialog} onOpenChange={setShowTreasuryDialog}>
         <DialogContent className="sm:max-w-md">
@@ -781,7 +740,7 @@ export default function HomePage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-muted p-4 rounded-lg">
-              <Label className="text-sm font-semibold">Treasury ID</Label>
+              <Label className="text-sm font-semibold">Treasury ID (Share this to invite players)</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 p-2 bg-background rounded border text-sm font-mono break-all">
                   {createdTreasuryId}
@@ -795,6 +754,9 @@ export default function HomePage() {
                   {copiedTreasuryId ? "Copied!" : "Copy"}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Players use this Treasury ID to join your room and start the game.
+              </p>
             </div>
             <div className="flex gap-2">
               <Button 
@@ -807,8 +769,8 @@ export default function HomePage() {
               <Button 
                 className="flex-1"
                 onClick={() => {
-                  const room = rooms.find(r => r.treasuryId === createdTreasuryId)
-                  if (room) enterMyRoom(room.id, createdTreasuryId!)
+                  const room = gameStateManager.getRoom(createdTreasuryId?.slice(-8) || "")
+                  if (room && createdTreasuryId) enterMyRoom(room.id, createdTreasuryId)
                 }}
               >
                 Enter Room
