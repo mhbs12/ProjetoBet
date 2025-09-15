@@ -417,6 +417,107 @@ class GameStateManager {
     return room
   }
 
+  async accessRoomByTreasury(roomId: string, treasuryId: string, playerAddress: string, signAndExecute: any): Promise<GameRoom> {
+    console.log(`[v0] Accessing room ${roomId} via treasury ${treasuryId} for player ${playerAddress}`)
+    
+    // First, try to get the room from local storage
+    let room = this.rooms.get(roomId)
+    
+    // If room doesn't exist locally, try to load from global storage
+    if (!room) {
+      console.log("[v0] Room not found locally, checking global storage...")
+      this.loadGlobalRooms()
+      room = this.rooms.get(roomId)
+      if (room) {
+        console.log("[v0] Room found in global storage!")
+      }
+    }
+    
+    // If room still doesn't exist, try to retrieve or create from treasury info
+    if (!room) {
+      console.log("[v0] Room not found in any storage, retrieving from treasury...")
+      try {
+        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
+        if (!treasuryInfo) {
+          throw new Error(`Treasury ${treasuryId} not found or is invalid`)
+        }
+        
+        // Create room from treasury info
+        room = {
+          id: roomId,
+          name: `Room ${roomId}`, // Default name when retrieved from treasury
+          treasuryId: treasuryId,
+          betAmount: treasuryInfo.betAmount,
+          players: [], // Will be populated as we determine the player's role
+          playersPresent: [], // No players present initially
+          gameState: "waiting",
+          board: Array(9).fill(null),
+          currentPlayer: "", // Will be set when game starts
+          createdAt: Date.now(),
+        }
+        
+        console.log("[v0] Successfully created room from treasury info:", treasuryInfo)
+      } catch (error) {
+        console.error("[v0] Failed to get treasury info:", error)
+        throw new Error(`Failed to retrieve room information: ${error.message}`)
+      }
+    }
+    
+    // Validate that the room has the correct treasury ID
+    if (room.treasuryId && room.treasuryId !== treasuryId) {
+      throw new Error(`Room treasury ID mismatch. Expected ${treasuryId}, found ${room.treasuryId}`)
+    }
+    
+    // If room exists but doesn't have treasury info, update it
+    if (!room.treasuryId) {
+      console.log("[v0] Room exists but missing treasury info, validating provided treasury:", treasuryId)
+      try {
+        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
+        if (treasuryInfo) {
+          room.treasuryId = treasuryId
+          room.betAmount = treasuryInfo.betAmount
+          console.log("[v0] Updated room with treasury info:", treasuryInfo)
+        } else {
+          throw new Error(`Treasury ${treasuryId} not found or is invalid`)
+        }
+      } catch (error) {
+        console.error("[v0] Failed to validate treasury info:", error)
+        throw new Error(`Failed to validate treasury information: ${error.message}`)
+      }
+    }
+    
+    // Determine if the player is already in the room or needs to join
+    if (room.players.includes(playerAddress)) {
+      // Player is already in the room, just mark them as present
+      console.log("[v0] Player already in room, marking as present")
+      if (!room.playersPresent.includes(playerAddress)) {
+        room.playersPresent.push(playerAddress)
+      }
+      
+      // Update the room state and save
+      this.rooms.set(roomId, room)
+      this.saveRoomsToStorage()
+      this.saveToSharedStorage(room)
+      this.notifyListeners(roomId, room)
+      
+      // Announce presence update to other sessions
+      globalRoomSync.announceRoomUpdated(room)
+      
+      return room
+    } else if (room.players.length === 0) {
+      // Room has no players, this might be the creator trying to enter
+      // We can't join without a blockchain transaction, so this might be an error state
+      throw new Error("Room exists but has no players. This may be an invalid room state.")
+    } else if (room.players.length === 1) {
+      // Room has one player, this user wants to join as the second player
+      console.log("[v0] Joining room as second player via treasury")
+      return await this.joinRoom(roomId, playerAddress, signAndExecute, treasuryId)
+    } else {
+      // Room is full
+      throw new Error(`Room ${roomId} is already full. Cannot join room with 2 players.`)
+    }
+  }
+
   async joinRoom(roomId: string, playerAddress: string, signAndExecute: any, treasuryId?: string, betAmount?: number): Promise<GameRoom> {
     let room = this.rooms.get(roomId)
     
