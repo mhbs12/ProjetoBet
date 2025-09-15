@@ -40,13 +40,22 @@ export default function HomePage() {
     router.push(`/game/${treasuryId}`)
   }
 
-  // Check if contract is properly configured
+  // Check if contract is properly configured and handle URL parameters
   useEffect(() => {
     const packageId = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
     setIsContractConfigured(!!packageId)
     
     if (!packageId) {
       console.warn("[v0] Contract package ID not configured")
+    }
+    
+    // Check for join parameter in URL
+    const urlParams = new URLSearchParams(window.location.search)
+    const joinParam = urlParams.get('join')
+    if (joinParam) {
+      setJoinTreasuryId(joinParam)
+      // Clear the URL parameter
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
 
@@ -360,7 +369,11 @@ export default function HomePage() {
               <Button 
                 variant="outline" 
                 className="flex-1"
-                onClick={() => setShowTreasuryDialog(false)}
+                onClick={() => {
+                  setShowTreasuryDialog(false)
+                  setCreatedTreasuryId(null)
+                  // Stay on the lobby page - user can create or join other rooms
+                }}
               >
                 Ficar no Lobby
               </Button>
