@@ -505,9 +505,26 @@ class GameStateManager {
       
       return room
     } else if (room.players.length === 0) {
-      // Room has no players, this might be the creator trying to enter
-      // We can't join without a blockchain transaction, so this might be an error state
-      throw new Error("Room exists but has no players. This may be an invalid room state.")
+      // Room has no players, this is likely the creator accessing their room
+      // Since they have the treasury ID, we can assume they are the original creator
+      console.log("[v0] Empty room accessed by treasury owner, treating as creator entry")
+      
+      // Add the player as the creator (first player)
+      room.players.push(playerAddress)
+      room.playersPresent.push(playerAddress)
+      room.currentPlayer = playerAddress
+      
+      // Update the room state and save
+      this.rooms.set(roomId, room)
+      this.saveRoomsToStorage()
+      this.saveToSharedStorage(room)
+      this.notifyListeners(roomId, room)
+      
+      // Announce presence update to other sessions
+      globalRoomSync.announceRoomUpdated(room)
+      
+      console.log("[v0] Creator successfully added to room as first player")
+      return room
     } else if (room.players.length === 1) {
       // Room has one player, this user wants to join as the second player
       console.log("[v0] Joining room as second player via treasury")
