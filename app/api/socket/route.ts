@@ -1,140 +1,94 @@
 import { NextRequest } from 'next/server'
-import { WebSocketServer } from 'ws'
-
-// Global WebSocket server instance
-let wss: WebSocketServer | null = null
 
 // Store room subscriptions
-const roomSubscriptions = new Map<string, Set<any>>()
-
-// Initialize WebSocket server
-function initWebSocketServer() {
-  if (wss) return wss
-
-  const port = parseInt(process.env.WS_PORT || '3001')
-  wss = new WebSocketServer({ port })
-
-  console.log(`[WebSocket] Server started on port ${port}`)
-
-  wss.on('connection', (ws, req) => {
-    console.log('[WebSocket] New client connected')
-
-    ws.on('message', (data) => {
-      try {
-        const message = JSON.parse(data.toString())
-        handleWebSocketMessage(ws, message)
-      } catch (error) {
-        console.error('[WebSocket] Invalid message format:', error)
-        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }))
-      }
-    })
-
-    ws.on('close', () => {
-      console.log('[WebSocket] Client disconnected')
-      // Remove client from all room subscriptions
-      roomSubscriptions.forEach((clients, roomId) => {
-        clients.delete(ws)
-        if (clients.size === 0) {
-          roomSubscriptions.delete(roomId)
-        }
-      })
-    })
-
-    ws.on('error', (error) => {
-      console.error('[WebSocket] Client error:', error)
-    })
-
-    // Send welcome message
-    ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected' }))
-  })
-
-  return wss
-}
-
-function handleWebSocketMessage(ws: any, message: any) {
-  const { type, roomId, data } = message
-
-  switch (type) {
-    case 'subscribe':
-      if (roomId) {
-        if (!roomSubscriptions.has(roomId)) {
-          roomSubscriptions.set(roomId, new Set())
-        }
-        roomSubscriptions.get(roomId)!.add(ws)
-        console.log(`[WebSocket] Client subscribed to room: ${roomId}`)
-        
-        ws.send(JSON.stringify({ 
-          type: 'subscribed', 
-          roomId,
-          message: `Subscribed to room ${roomId}` 
-        }))
-      }
-      break
-
-    case 'unsubscribe':
-      if (roomId && roomSubscriptions.has(roomId)) {
-        roomSubscriptions.get(roomId)!.delete(ws)
-        console.log(`[WebSocket] Client unsubscribed from room: ${roomId}`)
-        
-        if (roomSubscriptions.get(roomId)!.size === 0) {
-          roomSubscriptions.delete(roomId)
-        }
-      }
-      break
-
-    case 'room_update':
-      if (roomId && roomSubscriptions.has(roomId)) {
-        const clients = roomSubscriptions.get(roomId)!
-        const updateMessage = JSON.stringify({
-          type: 'room_state_changed',
-          roomId,
-          data
-        })
-
-        clients.forEach((client) => {
-          if (client !== ws && client.readyState === 1) { // Don't send back to sender
-            client.send(updateMessage)
-          }
-        })
-
-        console.log(`[WebSocket] Broadcasted room update to ${clients.size - 1} clients for room: ${roomId}`)
-      }
-      break
-
-    default:
-      ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type' }))
-  }
-}
+const roomSubscriptions = new Map<string, Set<{ writer: any; encoder: TextEncoder }>>()
 
 // Broadcast room state change to all subscribers
 export function broadcastRoomStateChange(roomId: string, roomData: any) {
-  if (!wss || !roomSubscriptions.has(roomId)) return
+  const connections = roomSubscriptions.get(roomId)
+  if (!connections) return
 
-  const clients = roomSubscriptions.get(roomId)!
   const message = JSON.stringify({
     type: 'room_state_changed',
     roomId,
-    data: roomData
+    data: roomData,
+    timestamp: Date.now()
   })
 
-  clients.forEach((client) => {
-    if (client.readyState === 1) {
-      client.send(message)
+  let activeCount = 0
+  connections.forEach(async ({ writer, encoder }) => {
+    try {
+      writer.enqueue(encoder.encode(`data: ${message}\n\n`))
+      activeCount++
+    } catch (error) {
+      console.log('[SSE] Connection closed, removing from subscribers')
+      connections.delete({ writer, encoder })
     }
   })
 
-  console.log(`[WebSocket] Broadcasted room state change to ${clients.size} clients for room: ${roomId}`)
+  console.log(`[SSE] Broadcasted room state change to ${activeCount} connections for room: ${roomId}`)
+  
+  // Clean up if no active connections
+  if (activeCount === 0) {
+    roomSubscriptions.delete(roomId)
+  }
 }
 
 export async function GET(request: NextRequest) {
-  // Initialize WebSocket server on first request
-  initWebSocketServer()
+  const { searchParams } = new URL(request.url)
+  const roomId = searchParams.get('roomId')
 
-  return new Response(JSON.stringify({ 
-    status: 'WebSocket server running',
-    port: process.env.WS_PORT || '3001'
-  }), {
-    headers: { 'Content-Type': 'application/json' }
+  if (!roomId) {
+    return new Response(JSON.stringify({ error: 'Missing roomId parameter' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const encoder = new TextEncoder()
+
+  // Create SSE stream
+  const stream = new ReadableStream({
+    start(controller) {
+      console.log(`[SSE] Client subscribed to room: ${roomId}`)
+
+      // Add connection to room subscriptions
+      if (!roomSubscriptions.has(roomId)) {
+        roomSubscriptions.set(roomId, new Set())
+      }
+
+      const connectionData = { writer: controller, encoder }
+      roomSubscriptions.get(roomId)!.add(connectionData)
+
+      // Send initial connection message
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+        type: 'connected',
+        roomId,
+        message: 'SSE connected to room'
+      })}\n\n`))
+
+      // Clean up on close
+      request.signal.addEventListener('abort', () => {
+        console.log(`[SSE] Client disconnected from room: ${roomId}`)
+        const connections = roomSubscriptions.get(roomId)
+        if (connections) {
+          connections.delete(connectionData)
+          if (connections.size === 0) {
+            roomSubscriptions.delete(roomId)
+          }
+        }
+      })
+    }
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    }
   })
 }
 

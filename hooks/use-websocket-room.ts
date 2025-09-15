@@ -1,107 +1,90 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { SimpleRoom } from '@/lib/simple-room-manager'
 
-export interface WebSocketMessage {
-  type: 'connected' | 'subscribed' | 'room_state_changed' | 'error'
+export interface SSEMessage {
+  type: 'connected' | 'room_state_changed' | 'error'
   roomId?: string
   data?: SimpleRoom
   message?: string
+  timestamp?: number
 }
 
-export function useWebSocketRoomSync(roomId: string | null) {
+export function useServerSentEventsRoomSync(roomId: string | null) {
   const [connected, setConnected] = useState(false)
   const [roomState, setRoomState] = useState<SimpleRoom | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const reconnectAttempts = useRef(0)
   const maxReconnectAttempts = 5
 
   const connect = useCallback(() => {
-    if (!roomId || wsRef.current?.readyState === WebSocket.OPEN) return
+    if (!roomId || eventSourceRef.current?.readyState === EventSource.OPEN) return
 
     try {
-      const wsPort = process.env.NEXT_PUBLIC_WS_PORT || '3001'
-      const wsUrl = `ws://localhost:${wsPort}`
+      const url = `/api/socket?roomId=${encodeURIComponent(roomId)}`
+      console.log(`[SSE] Connecting to ${url}`)
       
-      console.log(`[WebSocket] Connecting to ${wsUrl}`)
-      wsRef.current = new WebSocket(wsUrl)
+      eventSourceRef.current = new EventSource(url)
 
-      wsRef.current.onopen = () => {
-        console.log('[WebSocket] Connected successfully')
+      eventSourceRef.current.onopen = () => {
+        console.log('[SSE] Connected successfully')
         setConnected(true)
         setError(null)
         reconnectAttempts.current = 0
-
-        // Subscribe to room updates
-        if (roomId) {
-          wsRef.current?.send(JSON.stringify({
-            type: 'subscribe',
-            roomId
-          }))
-        }
       }
 
-      wsRef.current.onmessage = (event) => {
+      eventSourceRef.current.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data)
-          console.log('[WebSocket] Received message:', message.type, message.roomId)
+          const message: SSEMessage = JSON.parse(event.data)
+          console.log('[SSE] Received message:', message.type, message.roomId)
 
           switch (message.type) {
             case 'connected':
-              console.log('[WebSocket] Connection acknowledged')
-              break
-
-            case 'subscribed':
-              console.log(`[WebSocket] Subscribed to room: ${message.roomId}`)
+              console.log('[SSE] Connection acknowledged for room:', message.roomId)
               break
 
             case 'room_state_changed':
               if (message.data && message.roomId === roomId) {
-                console.log('[WebSocket] Room state updated:', message.data)
+                console.log('[SSE] Room state updated:', message.data)
                 setRoomState(message.data)
               }
               break
 
             case 'error':
-              console.error('[WebSocket] Server error:', message.message)
-              setError(message.message || 'WebSocket error')
+              console.error('[SSE] Server error:', message.message)
+              setError(message.message || 'SSE error')
               break
 
             default:
-              console.warn('[WebSocket] Unknown message type:', message.type)
+              console.warn('[SSE] Unknown message type:', message.type)
           }
         } catch (error) {
-          console.error('[WebSocket] Failed to parse message:', error)
+          console.error('[SSE] Failed to parse message:', error)
         }
       }
 
-      wsRef.current.onclose = (event) => {
-        console.log('[WebSocket] Connection closed:', event.code, event.reason)
+      eventSourceRef.current.onerror = (event) => {
+        console.log('[SSE] Connection error or closed')
         setConnected(false)
 
         // Attempt to reconnect if not a manual close
-        if (event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts) {
+        if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000)
-          console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1})`)
+          console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1})`)
           
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttempts.current++
             connect()
           }, delay)
         } else if (reconnectAttempts.current >= maxReconnectAttempts) {
-          setError('Failed to reconnect to WebSocket server')
+          setError('Failed to reconnect to server')
         }
       }
 
-      wsRef.current.onerror = (error) => {
-        console.error('[WebSocket] Connection error:', error)
-        setError('WebSocket connection error')
-      }
-
     } catch (error) {
-      console.error('[WebSocket] Failed to create connection:', error)
-      setError('Failed to create WebSocket connection')
+      console.error('[SSE] Failed to create connection:', error)
+      setError('Failed to create SSE connection')
     }
   }, [roomId])
 
@@ -111,65 +94,46 @@ export function useWebSocketRoomSync(roomId: string | null) {
       reconnectTimeoutRef.current = null
     }
 
-    if (wsRef.current) {
-      if (roomId && wsRef.current.readyState === WebSocket.OPEN) {
-        // Unsubscribe from room before closing
-        wsRef.current.send(JSON.stringify({
-          type: 'unsubscribe',
-          roomId
-        }))
-      }
-
-      wsRef.current.close(1000, 'Manual disconnect')
-      wsRef.current = null
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
     }
 
     setConnected(false)
     setRoomState(null)
     setError(null)
     reconnectAttempts.current = 0
-  }, [roomId])
+  }, [])
 
-  const broadcastRoomUpdate = useCallback((roomData: SimpleRoom) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN && roomId) {
-      wsRef.current.send(JSON.stringify({
-        type: 'room_update',
-        roomId,
-        data: roomData
-      }))
-      console.log('[WebSocket] Broadcasted room update:', roomData)
+  const broadcastRoomUpdate = useCallback(async (roomData: SimpleRoom) => {
+    if (roomId) {
+      try {
+        await fetch('/api/socket', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            roomId,
+            roomData
+          })
+        })
+        console.log('[SSE] Broadcasted room update:', roomData)
+      } catch (error) {
+        console.error('[SSE] Failed to broadcast room update:', error)
+      }
     }
   }, [roomId])
 
-  // Initialize WebSocket server and connect when component mounts
+  // Connect when component mounts or roomId changes
   useEffect(() => {
     if (!roomId) return
 
-    // First, ensure WebSocket server is running
-    fetch('/api/socket')
-      .then(() => {
-        console.log('[WebSocket] Server initialized')
-        // Small delay to let server fully start
-        setTimeout(connect, 500)
-      })
-      .catch((error) => {
-        console.error('[WebSocket] Failed to initialize server:', error)
-        setError('Failed to initialize WebSocket server')
-      })
+    console.log('[SSE] Initializing connection for room:', roomId)
+    connect()
 
     return disconnect
   }, [roomId, connect, disconnect])
-
-  // Change room subscription when roomId changes
-  useEffect(() => {
-    if (connected && wsRef.current && roomId) {
-      // Subscribe to new room
-      wsRef.current.send(JSON.stringify({
-        type: 'subscribe',
-        roomId
-      }))
-    }
-  }, [roomId, connected])
 
   return {
     connected,
@@ -179,3 +143,6 @@ export function useWebSocketRoomSync(roomId: string | null) {
     disconnect
   }
 }
+
+// Export with backward compatibility alias
+export const useWebSocketRoomSync = useServerSentEventsRoomSync

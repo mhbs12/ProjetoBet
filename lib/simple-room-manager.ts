@@ -343,7 +343,7 @@ class SimpleRoomManager {
   }
 
   /**
-   * Broadcast room update via WebSocket API
+   * Broadcast room update via Server-Sent Events API
    */
   private async broadcastRoomUpdate(roomId: string, roomData: SimpleRoom): Promise<void> {
     try {
@@ -357,9 +357,9 @@ class SimpleRoomManager {
           roomData
         })
       })
-      console.log('[v0] Room update broadcasted via WebSocket:', roomId)
+      console.log('[v0] Room update broadcasted via SSE:', roomId)
     } catch (error) {
-      console.warn('[v0] Failed to broadcast room update via WebSocket:', error)
+      console.warn('[v0] Failed to broadcast room update via SSE:', error)
       // Don't throw error - local updates should still work
     }
   }

@@ -194,7 +194,7 @@ export default function GamePage() {
             </span>
           </h1>
           
-          {/* WebSocket connection status */}
+          {/* Real-time connection status */}
           <div className="flex items-center gap-2 text-sm">
             {wsConnected ? (
               <>
