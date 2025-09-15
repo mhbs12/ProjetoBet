@@ -161,11 +161,11 @@ export class SuiGameContract {
 
       // Call the correct move function as specified in requirements
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::bet::EntrarOnTheLineSala`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::entrar_aposta`,
         arguments: [tx.object(treasuryId), coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::EntrarOnTheLineSala with treasury ${treasuryId}, coin, and amount ${amountInMist}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::entrar_aposta with treasury ${treasuryId}, coin, and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       return new Promise((resolve, reject) => {
