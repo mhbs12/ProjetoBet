@@ -216,7 +216,7 @@ class GameStateManager {
     return room
   }
 
-  async joinRoom(roomId: string, playerAddress: string, signAndExecute: any, treasuryId?: string): Promise<GameRoom> {
+  async joinRoom(roomId: string, playerAddress: string, signAndExecute: any, treasuryId?: string, betAmount?: number): Promise<GameRoom> {
     let room = this.rooms.get(roomId)
     
     console.log(`[v0] Attempting to join room ${roomId}, local room exists: ${!!room}, treasury provided: ${!!treasuryId}`)
@@ -328,8 +328,11 @@ class GameStateManager {
     console.log("[v0] Joining room with modern SUI transaction, treasury:", finalTreasuryId)
 
     try {
+      // Use the user-specified bet amount, or fall back to room's bet amount
+      const finalBetAmount = betAmount || room.betAmount
+      
       // Execute blockchain transaction to join the betting room
-      const result = await suiContract.joinBettingRoom(finalTreasuryId!, room.betAmount, signAndExecute)
+      const result = await suiContract.joinBettingRoom(finalTreasuryId!, finalBetAmount, signAndExecute)
       
       console.log("[v0] Join transaction successful:", result)
 
