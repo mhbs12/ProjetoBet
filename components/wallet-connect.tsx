@@ -5,14 +5,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Wallet, LogOut, Coins } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 
 export function WalletConnect() {
   const currentAccount = useCurrentAccount()
   const { mutate: disconnect } = useDisconnectWallet()
-  const { mutate: connect } = useConnectWallet()
+  const connectWalletMutation = useConnectWallet()
   const wallets = useWallets()
-  const [isConnecting, setIsConnecting] = useState(false)
 
   useEffect(() => {
     console.log("[v0] Current account:", currentAccount)
@@ -25,31 +24,27 @@ export function WalletConnect() {
 
   const handleConnect = async () => {
     console.log("[v0] Connect button clicked")
-    setIsConnecting(true)
 
     try {
       if (wallets.length > 0) {
         console.log("[v0] Attempting to connect to:", wallets[0].name)
-        connect(
+        // Use the connect mutation with correct API for dapp-kit v0.18.0
+        connectWalletMutation.mutate(
           { wallet: wallets[0] },
           {
             onSuccess: () => {
               console.log("[v0] Wallet connected successfully")
-              setIsConnecting(false)
             },
             onError: (error) => {
               console.error("[v0] Wallet connection failed:", error)
-              setIsConnecting(false)
             },
           },
         )
       } else {
         console.log("[v0] No wallets available")
-        setIsConnecting(false)
       }
     } catch (error) {
       console.error("[v0] Connection error:", error)
-      setIsConnecting(false)
     }
   }
 
@@ -61,8 +56,8 @@ export function WalletConnect() {
           <h3 className="text-lg font-semibold mb-2">Connect SUI Wallet</h3>
           <p className="text-muted-foreground mb-4">Connect your SUI wallet to start playing and betting</p>
 
-          <Button onClick={handleConnect} disabled={isConnecting || wallets.length === 0} className="w-full">
-            {isConnecting ? "Connecting..." : "Connect Wallet"}
+          <Button onClick={handleConnect} disabled={connectWalletMutation.isPending || wallets.length === 0} className="w-full">
+            {connectWalletMutation.isPending ? "Connecting..." : "Connect Wallet"}
           </Button>
 
           {wallets.length === 0 && (
