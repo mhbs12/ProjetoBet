@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { WalletConnect } from "@/components/wallet-connect"
-import { Plus, Users, Coins, Trophy, Shield, Loader2, AlertTriangle, Search, Clock } from "lucide-react"
+import { Plus, Users, Coins, Trophy, Shield, Loader2, AlertTriangle, Search, Clock, Sparkles } from "lucide-react"
 import { gameStateManager } from "@/lib/game-state"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -278,8 +278,14 @@ export default function HomePage() {
             <p className="text-muted-foreground text-lg">Play TicTacToe with real SUI cryptocurrency bets</p>
           </div>
 
-          <div className="flex justify-center mb-8">
+          <div className="flex flex-col items-center gap-4 mb-8">
             <WalletConnect />
+            <Link href="/mint-og-nft">
+              <Button variant="outline" className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Mint OG NFT
+              </Button>
+            </Link>
           </div>
 
           {/* Show Available Rooms even without wallet connection for demonstration */}
@@ -360,8 +366,14 @@ export default function HomePage() {
           <h1 className="text-4xl font-bold mb-4 gradient-text">SUI TicTacToe Betting</h1>
           <p className="text-muted-foreground text-lg mb-6">Play TicTacToe with real SUI cryptocurrency bets</p>
 
-          <div className="flex justify-center mb-8">
+          <div className="flex flex-col items-center gap-4 mb-8">
             <WalletConnect />
+            <Link href="/mint-og-nft">
+              <Button variant="outline" className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Mint OG NFT
+              </Button>
+            </Link>
           </div>
 
           {!isContractConfigured && (
