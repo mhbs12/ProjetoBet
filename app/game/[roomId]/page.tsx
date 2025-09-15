@@ -81,7 +81,8 @@ export default function GamePage() {
         roomId,
         currentAccount.address,
         signAndExecuteTransaction,
-        treasuryId
+        treasuryId,
+        undefined  // Use room's default bet amount for auto-join
       )
 
       setRoom(joinedRoom)

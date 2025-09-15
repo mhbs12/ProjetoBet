@@ -25,6 +25,7 @@ export default function HomePage() {
   const [newRoomName, setNewRoomName] = useState("")
   const [newRoomBet, setNewRoomBet] = useState("0.1")
   const [joinRoomId, setJoinRoomId] = useState("")
+  const [joinBetAmount, setJoinBetAmount] = useState("0.1")
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [joiningRoom, setJoiningRoom] = useState(false)
   const [isContractConfigured, setIsContractConfigured] = useState(true)
@@ -165,7 +166,13 @@ export default function HomePage() {
   }
 
   const joinRoom = async () => {
-    if (!joinRoomId.trim() || !currentAccount) return
+    if (!joinRoomId.trim() || !currentAccount || !joinBetAmount) return
+
+    const betAmount = Number.parseFloat(joinBetAmount)
+    if (betAmount <= 0) {
+      alert("Bet amount must be greater than 0")
+      return
+    }
 
     setJoiningRoom(true)
     try {
@@ -187,11 +194,13 @@ export default function HomePage() {
         roomIdToJoin,
         currentAccount.address,
         signAndExecuteTransaction,
-        treasuryIdFromUrl
+        treasuryIdFromUrl,
+        betAmount  // Pass the user-specified bet amount
       )
 
       setRooms((prev) => [...prev, room])
       setJoinRoomId("")
+      setJoinBetAmount("0.1")  // Reset bet amount
       loadAvailableRooms() // Refresh available rooms
       loadMyRooms() // Refresh my rooms
 
@@ -224,18 +233,22 @@ export default function HomePage() {
     }
   }
 
-  const joinRoomDirectly = async (room: any) => {
+  const joinRoomDirectly = async (room: any, customBetAmount?: number) => {
     if (!currentAccount) return
+
+    // Use the room's bet amount as default, but allow custom amount
+    const betAmount = customBetAmount || room.betAmount
 
     setJoiningRoom(true)
     try {
-      console.log("[v0] Joining room directly:", room.id)
+      console.log("[v0] Joining room directly:", room.id, "with bet amount:", betAmount)
 
       const joinedRoom = await gameStateManager.joinRoom(
         room.id,
         currentAccount.address,
         signAndExecuteTransaction,
-        room.treasuryId
+        room.treasuryId,
+        betAmount  // Pass the bet amount
       )
 
       setRooms((prev) => [...prev, joinedRoom])
@@ -475,7 +488,23 @@ export default function HomePage() {
                   You can paste either the room ID or the full share link with treasury information
                 </p>
               </div>
-              <Button onClick={joinRoom} className="w-full" disabled={!joinRoomId.trim() || joiningRoom || !isContractConfigured}>
+              <div>
+                <Label htmlFor="joinBetAmount">Your Bet Amount (SUI)</Label>
+                <Input
+                  id="joinBetAmount"
+                  type="number"
+                  value={joinBetAmount}
+                  onChange={(e) => setJoinBetAmount(e.target.value)}
+                  placeholder="0.1"
+                  min="0.01"
+                  step="0.01"
+                  disabled={joiningRoom}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter the amount of SUI you want to bet in this game
+                </p>
+              </div>
+              <Button onClick={joinRoom} className="w-full" disabled={!joinRoomId.trim() || !joinBetAmount || joiningRoom || !isContractConfigured}>
                 {joiningRoom ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
