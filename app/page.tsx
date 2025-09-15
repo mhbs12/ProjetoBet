@@ -59,12 +59,22 @@ export default function HomePage() {
 
       const betAmount = Number.parseFloat(newRoomBet)
       
+      // Validate bet amount
+      if (betAmount <= 0 || betAmount < 0.001) {
+        throw new Error("Bet amount must be at least 0.001 SUI")
+      }
+      
       // Create room and get treasury ID as room code
       const treasuryId = await simpleRoomManager.createRoom(
         currentAccount.address,
         betAmount,
         signAndExecuteTransaction,
       )
+      
+      // Validate treasury ID before proceeding
+      if (!treasuryId || typeof treasuryId !== 'string') {
+        throw new Error("Failed to extract treasury ID from transaction. The room may have been created but cannot be accessed. Please try again.")
+      }
       
       // Show treasury ID dialog for sharing
       setCreatedTreasuryId(treasuryId)
@@ -75,7 +85,22 @@ export default function HomePage() {
       console.log("[v0] Room created successfully with Treasury ID (room code):", treasuryId)
     } catch (error) {
       console.error("[v0] Failed to create room:", error)
-      alert(`Failed to create room: ${error.message}`)
+      
+      // Provide user-friendly error messages
+      let userMessage = "Failed to create room"
+      if (error.message.includes("treasury ID")) {
+        userMessage = "Transaction succeeded but failed to extract room code. Please try again or contact support."
+      } else if (error.message.includes("Contract not configured")) {
+        userMessage = "Smart contract not configured. Please contact the administrator."
+      } else if (error.message.includes("Insufficient")) {
+        userMessage = "Insufficient SUI balance. Please add more SUI to your wallet."
+      } else if (error.message.includes("Bet amount")) {
+        userMessage = error.message
+      } else {
+        userMessage = `Failed to create room: ${error.message}`
+      }
+      
+      alert(userMessage)
     } finally {
       setCreatingRoom(false)
     }
