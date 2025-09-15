@@ -231,7 +231,15 @@ class SimpleRoomManager {
       }
 
       if (room.players.includes(playerAddress)) {
-        throw new Error("You are already in this room.")
+        // If player is already in room, just return the room (useful for creators re-entering)
+        console.log("[v0] Player is already in room, returning existing room:", playerAddress)
+        
+        // Update room state and notify listeners to ensure sync
+        this.rooms.set(treasuryId, room)
+        this.saveRoomsToStorage()
+        this.notifyListeners(treasuryId, room)
+        
+        return room
       }
 
       // Call the blockchain contract to join the room
@@ -272,6 +280,7 @@ class SimpleRoomManager {
 
   /**
    * Enter an existing room (for creators who want to enter their own room)
+   * This method handles creators accessing their own rooms without needing blockchain transactions
    */
   enterRoom(treasuryId: string, playerAddress: string): SimpleRoom | null {
     const room = this.rooms.get(treasuryId)
@@ -286,6 +295,12 @@ class SimpleRoomManager {
     }
 
     console.log("[v0] Player entering room:", playerAddress)
+    
+    // Update room state and notify listeners to ensure real-time updates
+    this.rooms.set(treasuryId, room)
+    this.saveRoomsToStorage()
+    this.notifyListeners(treasuryId, room)
+    
     return room
   }
 
@@ -349,6 +364,52 @@ class SimpleRoomManager {
     this.rooms.set(treasuryId, room)
     this.saveRoomsToStorage()
     this.notifyListeners(treasuryId, room)
+  }
+
+  /**
+   * Get room by treasury ID, with fallback to blockchain lookup
+   */
+  async getOrLoadRoom(treasuryId: string): Promise<SimpleRoom | null> {
+    // First try local storage
+    let room = this.rooms.get(treasuryId)
+    
+    if (room) {
+      return room
+    }
+    
+    // If not found locally, try to load from blockchain
+    console.log("[v0] Room not found locally, attempting to load from blockchain:", treasuryId)
+    
+    try {
+      const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
+      if (!treasuryInfo) {
+        console.log("[v0] Treasury not found on blockchain:", treasuryId)
+        return null
+      }
+      
+      // Create room from treasury info
+      room = {
+        treasuryId,
+        betAmount: treasuryInfo.betAmount,
+        creator: "unknown", // We don't know the creator from treasury info alone
+        players: [], // This will be populated based on who's accessing
+        currentPlayer: "",
+        board: Array(9).fill(null),
+        gameState: "waiting",
+        createdAt: Date.now(),
+      }
+      
+      // Store it locally for future access
+      this.rooms.set(treasuryId, room)
+      this.saveRoomsToStorage()
+      
+      console.log("[v0] Room loaded from blockchain and cached locally:", room)
+      return room
+      
+    } catch (error) {
+      console.error("[v0] Failed to load room from blockchain:", error)
+      return null
+    }
   }
 
   /**

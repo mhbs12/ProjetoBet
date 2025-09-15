@@ -60,8 +60,8 @@ export default function GamePage() {
   const loadRoom = async () => {
     setLoading(true)
     try {
-      // Try to get the room using treasury ID
-      const currentRoom = simpleRoomManager.getRoom(treasuryId)
+      // Try to get the room using treasury ID with blockchain fallback
+      const currentRoom = await simpleRoomManager.getOrLoadRoom(treasuryId)
       
       if (currentRoom) {
         setRoom(currentRoom)
@@ -69,9 +69,14 @@ export default function GamePage() {
         const isPlayerX = currentRoom.players[0] === currentAccount?.address
         setPlayerSymbol(isPlayerX ? "X" : "O")
         console.log("[v0] Room loaded successfully")
+        
+        // If current player is not in the room but room exists, they might need to join
+        if (currentAccount && !currentRoom.players.includes(currentAccount.address)) {
+          console.log("[v0] Current player not in room, they may need to join")
+        }
       } else {
-        // Room not found locally, this might be a new room or we need to join
-        console.log("[v0] Room not found locally for treasury ID:", treasuryId)
+        // Room not found locally or on blockchain
+        console.log("[v0] Room not found anywhere for treasury ID:", treasuryId)
         setRoom(null)
       }
 
@@ -215,7 +220,43 @@ export default function GamePage() {
 
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            {isWaitingForPlayer ? (
+            {!isPlayerInRoom ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-xl font-semibold mb-2">Sala Encontrada</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Esta sala existe mas você ainda não entrou nela. Clique no botão abaixo para participar do jogo.
+                  </p>
+                  
+                  <div className="bg-muted p-4 rounded-lg mb-4">
+                    <p className="text-sm font-semibold mb-2">Informações da Sala:</p>
+                    <p className="text-sm">Valor da Aposta: {room.betAmount} SUI</p>
+                    <p className="text-sm">Jogadores: {room.players.length}/2</p>
+                    <p className="text-sm">Status: {room.gameState === "waiting" ? "Aguardando" : room.gameState === "playing" ? "Em andamento" : "Finalizado"}</p>
+                  </div>
+                  
+                  {room.gameState === "waiting" && room.players.length < 2 && (
+                    <Button 
+                      onClick={() => {
+                        // Navigate back to home to join via the join interface
+                        router.push(`/?join=${treasuryId}`)
+                      }}
+                      className="mr-2"
+                    >
+                      Entrar na Sala
+                    </Button>
+                  )}
+                  
+                  <Button 
+                    variant="outline"
+                    onClick={() => router.push("/")}
+                  >
+                    Voltar ao Lobby
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : isWaitingForPlayer ? (
               <Card>
                 <CardContent className="p-8 text-center">
                   <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground animate-pulse" />
