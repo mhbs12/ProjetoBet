@@ -15,8 +15,9 @@ export interface GameRoom {
   createdAt: number
 }
 
-// Shared room storage that persists across wallet connections
-const SHARED_ROOMS_STORAGE_KEY = 'shared-game-rooms'
+// Global room storage that persists across browser sessions
+const GLOBAL_ROOMS_STORAGE_KEY = 'global-game-rooms'
+const LEGACY_SHARED_ROOMS_STORAGE_KEY = 'shared-game-rooms'
 
 class GameStateManager {
   private rooms = new Map<string, GameRoom>()
@@ -25,7 +26,8 @@ class GameStateManager {
 
   constructor() {
     this.loadRoomsFromStorage()
-    this.loadSharedRooms()
+    this.loadGlobalRooms()
+    this.migrateLegacySharedRooms()
   }
 
   // Allow access to rooms map for testing
@@ -53,7 +55,7 @@ class GameStateManager {
     if (typeof window === 'undefined') return
     
     try {
-      const sharedRooms = localStorage.getItem(SHARED_ROOMS_STORAGE_KEY)
+      const sharedRooms = localStorage.getItem(LEGACY_SHARED_ROOMS_STORAGE_KEY)
       if (sharedRooms) {
         const roomsData = JSON.parse(sharedRooms)
         Object.entries(roomsData).forEach(([id, room]) => {
@@ -62,10 +64,63 @@ class GameStateManager {
             this.rooms.set(id, room as GameRoom)
           }
         })
-        console.log('[v0] Loaded shared rooms:', Object.keys(roomsData).length)
+        console.log('[v0] Loaded legacy shared rooms:', Object.keys(roomsData).length)
       }
     } catch (error) {
-      console.warn('[v0] Failed to load shared rooms from storage:', error)
+      console.warn('[v0] Failed to load legacy shared rooms from storage:', error)
+    }
+  }
+
+  private loadGlobalRooms(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+      if (globalRooms) {
+        const roomsData = JSON.parse(globalRooms)
+        Object.entries(roomsData).forEach(([id, room]) => {
+          const roomData = room as GameRoom
+          // Only load rooms that are still relevant (waiting for players or recently created)
+          const isRelevant = roomData.gameState === 'waiting' || 
+                           (Date.now() - roomData.createdAt) < 300000 // 5 minutes
+          
+          if (isRelevant && !this.rooms.has(id)) {
+            this.rooms.set(id, roomData)
+          }
+        })
+        console.log('[v0] Loaded global rooms:', Object.keys(roomsData).length)
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to load global rooms from storage:', error)
+    }
+  }
+
+  private migrateLegacySharedRooms(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const legacySharedRooms = localStorage.getItem(LEGACY_SHARED_ROOMS_STORAGE_KEY)
+      if (legacySharedRooms) {
+        const roomsData = JSON.parse(legacySharedRooms)
+        
+        // Migrate to global storage
+        const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+        const globalRoomsData = globalRooms ? JSON.parse(globalRooms) : {}
+        
+        Object.entries(roomsData).forEach(([id, room]) => {
+          if (!globalRoomsData[id]) {
+            globalRoomsData[id] = room
+          }
+        })
+        
+        localStorage.setItem(GLOBAL_ROOMS_STORAGE_KEY, JSON.stringify(globalRoomsData))
+        
+        // Clear legacy storage after migration
+        localStorage.removeItem(LEGACY_SHARED_ROOMS_STORAGE_KEY)
+        console.log('[v0] Migrated legacy shared rooms to global storage')
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to migrate legacy shared rooms:', error)
     }
   }
 
@@ -87,17 +142,17 @@ class GameStateManager {
     if (typeof window === 'undefined') return
     
     try {
-      const sharedRooms = localStorage.getItem(SHARED_ROOMS_STORAGE_KEY)
-      const roomsData = sharedRooms ? JSON.parse(sharedRooms) : {}
+      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+      const roomsData = globalRooms ? JSON.parse(globalRooms) : {}
       
-      // Only save rooms that are waiting or recently created
-      if (room.gameState === 'waiting' || (Date.now() - room.createdAt) < 60000) {
+      // Save all rooms that are waiting or recently created to global storage
+      if (room.gameState === 'waiting' || (Date.now() - room.createdAt) < 600000) { // 10 minutes
         roomsData[room.id] = room
-        localStorage.setItem(SHARED_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
-        console.log('[v0] Saved room to shared storage:', room.id)
+        localStorage.setItem(GLOBAL_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
+        console.log('[v0] Saved room to global storage:', room.id)
       }
     } catch (error) {
-      console.warn('[v0] Failed to save room to shared storage:', error)
+      console.warn('[v0] Failed to save room to global storage:', error)
     }
   }
 
@@ -105,15 +160,46 @@ class GameStateManager {
     if (typeof window === 'undefined') return
     
     try {
-      const sharedRooms = localStorage.getItem(SHARED_ROOMS_STORAGE_KEY)
-      if (sharedRooms) {
-        const roomsData = JSON.parse(sharedRooms)
+      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+      if (globalRooms) {
+        const roomsData = JSON.parse(globalRooms)
         delete roomsData[roomId]
-        localStorage.setItem(SHARED_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
-        console.log('[v0] Removed room from shared storage:', roomId)
+        localStorage.setItem(GLOBAL_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
+        console.log('[v0] Removed room from global storage:', roomId)
       }
     } catch (error) {
-      console.warn('[v0] Failed to remove room from shared storage:', error)
+      console.warn('[v0] Failed to remove room from global storage:', error)
+    }
+  }
+
+  private cleanupExpiredRooms(): void {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+      if (globalRooms) {
+        const roomsData = JSON.parse(globalRooms)
+        const now = Date.now()
+        let cleaned = false
+        
+        Object.entries(roomsData).forEach(([id, room]) => {
+          const roomData = room as GameRoom
+          // Remove rooms older than 1 hour or finished games older than 10 minutes
+          const maxAge = roomData.gameState === 'finished' ? 600000 : 3600000
+          if (now - roomData.createdAt > maxAge) {
+            delete roomsData[id]
+            cleaned = true
+            console.log('[v0] Cleaned up expired room:', id)
+          }
+        })
+        
+        if (cleaned) {
+          localStorage.setItem(GLOBAL_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
+          console.log('[v0] Completed room cleanup')
+        }
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to cleanup expired rooms:', error)
     }
   }
 
@@ -167,7 +253,7 @@ class GameStateManager {
 
       this.rooms.set(roomId, room)
       this.saveRoomsToStorage()
-      this.saveToSharedStorage(room) // Save to shared storage for cross-wallet visibility
+      this.saveToSharedStorage(room) // Save to global storage for cross-browser/wallet visibility
       this.notifyListeners(roomId, room)
 
       if (!treasuryObject?.objectId) {
@@ -177,6 +263,7 @@ class GameStateManager {
       }
 
       console.log("[v0] Room created successfully with treasury:", treasuryObject?.objectId)
+      console.log("[v0] Room saved to global storage for cross-browser visibility")
       return room
     } catch (error) {
       console.error("[v0] Failed to create room:", error)
@@ -220,6 +307,16 @@ class GameStateManager {
     let room = this.rooms.get(roomId)
     
     console.log(`[v0] Attempting to join room ${roomId}, local room exists: ${!!room}, treasury provided: ${!!treasuryId}`)
+    
+    // If room doesn't exist locally, try to load from global storage first
+    if (!room) {
+      console.log("[v0] Room not found locally, checking global storage...")
+      this.loadGlobalRooms()
+      room = this.rooms.get(roomId)
+      if (room) {
+        console.log("[v0] Room found in global storage!")
+      }
+    }
     
     // If room doesn't exist locally but we have a treasury ID, get info from blockchain
     if (!room && treasuryId) {
@@ -463,8 +560,9 @@ class GameStateManager {
   }
 
   getAvailableRooms(): GameRoom[] {
-    // Reload shared rooms to get latest data from other wallets
-    this.loadSharedRooms()
+    // Refresh global rooms and cleanup expired ones
+    this.loadGlobalRooms()
+    this.cleanupExpiredRooms()
     
     return Array.from(this.rooms.values()).filter(room => room.gameState === "waiting")
   }
@@ -523,7 +621,7 @@ class GameStateManager {
     return urlParams.get('treasury')
   }
 
-  // Helper method to add mock rooms for testing (includes shared storage)
+  // Helper method to add mock rooms for testing (includes global storage)
   addMockRoom(room: GameRoom): void {
     // Ensure playersPresent is initialized for mock rooms
     if (!room.playersPresent) {
@@ -531,6 +629,32 @@ class GameStateManager {
     }
     this.rooms.set(room.id, room)
     this.saveToSharedStorage(room)
+  }
+
+  // Method to refresh rooms from global storage (useful for polling for new rooms)
+  refreshRoomsFromGlobalStorage(): void {
+    this.loadGlobalRooms()
+  }
+
+  // Method to get the current number of available rooms
+  getAvailableRoomsCount(): number {
+    return this.getAvailableRooms().length
+  }
+
+  // Method to check if a specific room exists in global storage
+  async checkRoomExistsGlobally(roomId: string): Promise<boolean> {
+    if (typeof window === 'undefined') return false
+    
+    try {
+      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+      if (globalRooms) {
+        const roomsData = JSON.parse(globalRooms)
+        return roomsData.hasOwnProperty(roomId)
+      }
+    } catch (error) {
+      console.warn('[v0] Failed to check room in global storage:', error)
+    }
+    return false
   }
 }
 
