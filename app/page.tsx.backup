@@ -725,7 +725,6 @@ export default function HomePage() {
             </CardContent>
           </Card>
         )}
-      </div>
 
       {/* Treasury ID Success Dialog */}
       <Dialog open={showTreasuryDialog} onOpenChange={setShowTreasuryDialog}>
