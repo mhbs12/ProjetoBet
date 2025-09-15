@@ -6,16 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { WalletConnect } from "@/components/wallet-connect"
-import { Sparkles, Loader2, CheckCircle, XCircle, Coins, Trophy, Users, ArrowLeft } from "lucide-react"
-import { mint, getMintStats, type MintResult } from "@/lib/og_nft"
-import { useCurrentAccount } from "@mysten/dapp-kit"
+import { Sparkles, Loader2, CheckCircle, XCircle, Coins, Trophy, Users, ArrowLeft, Info } from "lucide-react"
+import { mint, getMintStats, getOGNFTInfo, type MintResult } from "@/lib/og_nft"
+import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit"
 import Link from "next/link"
 
 export default function MintOGNFTPage() {
   const currentAccount = useCurrentAccount()
+  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
   const [isMinting, setIsMinting] = useState(false)
   const [mintResult, setMintResult] = useState<MintResult | null>(null)
   const mintStats = getMintStats()
+  const ogNFTInfo = getOGNFTInfo()
 
   const handleMint = async () => {
     if (!currentAccount) {
@@ -28,7 +30,7 @@ export default function MintOGNFTPage() {
 
     try {
       console.log('[Mint Page] Starting mint process...')
-      const result = await mint()
+      const result = await mint(signAndExecuteTransaction)
       setMintResult(result)
       
       if (result.success) {
@@ -65,7 +67,7 @@ export default function MintOGNFTPage() {
                 Mint OG NFT
               </h1>
               <p className="text-muted-foreground text-lg mt-2">
-                Mint exclusive OG NFTs from ProjetoBet
+                Mint exclusive OG NFTs from ProjetoBet - FREE & UNLIMITED
               </p>
             </div>
           </div>
@@ -74,13 +76,32 @@ export default function MintOGNFTPage() {
           </div>
         </div>
 
+        {/* Network Info Alert */}
+        {ogNFTInfo.packageId ? (
+          <Alert className="mb-6">
+            <Info className="h-4 w-4" />
+            <AlertTitle>Blockchain Configuration</AlertTitle>
+            <AlertDescription>
+              Connected to {ogNFTInfo.network} network • Package: {ogNFTInfo.packageId?.slice(0, 10)}...
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="mb-6 border-yellow-200 bg-yellow-50">
+            <Info className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-800">Configuration Required</AlertTitle>
+            <AlertDescription className="text-yellow-700">
+              OG NFT package ID not configured. Please set NEXT_PUBLIC_OG_NFT_PACKAGE_ID in environment variables.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card className="text-center">
             <CardContent className="p-6">
               <Trophy className="w-12 h-12 mx-auto mb-4 text-primary" />
               <h3 className="font-semibold mb-2">Total Minted</h3>
-              <p className="text-2xl font-bold">{mintStats.totalMinted.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{mintStats.totalMinted}</p>
             </CardContent>
           </Card>
 
@@ -88,15 +109,15 @@ export default function MintOGNFTPage() {
             <CardContent className="p-6">
               <Users className="w-12 h-12 mx-auto mb-4 text-accent" />
               <h3 className="font-semibold mb-2">Available Supply</h3>
-              <p className="text-2xl font-bold">{mintStats.availableSupply.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{mintStats.availableSupply}</p>
             </CardContent>
           </Card>
 
           <Card className="text-center">
             <CardContent className="p-6">
-              <Coins className="w-12 h-12 mx-auto mb-4 text-primary" />
+              <Coins className="w-12 h-12 mx-auto mb-4 text-green-600" />
               <h3 className="font-semibold mb-2">Mint Price</h3>
-              <p className="text-2xl font-bold">{mintStats.mintPrice} SUI</p>
+              <p className="text-2xl font-bold text-green-600">FREE</p>
             </CardContent>
           </Card>
         </div>
@@ -116,17 +137,24 @@ export default function MintOGNFTPage() {
                 <Sparkles className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold mb-2">OG NFT Collection</h3>
                 <p className="text-muted-foreground mb-4">
-                  Exclusive NFTs with different rarities and unique designs
+                  Exclusive NFTs minted directly on SUI blockchain - completely free with unlimited supply
                 </p>
                 <div className="flex justify-center gap-2 mb-4">
-                  <Badge variant="outline">Common</Badge>
-                  <Badge variant="secondary">Rare</Badge>
-                  <Badge variant="default">Epic</Badge>
-                  <Badge className="bg-gradient-to-r from-purple-500 to-pink-500">Legendary</Badge>
+                  <Badge className="bg-gradient-to-r from-blue-500 to-purple-500">Free Mint</Badge>
+                  <Badge className="bg-gradient-to-r from-green-500 to-blue-500">Unlimited</Badge>
+                  <Badge className="bg-gradient-to-r from-purple-500 to-pink-500">On-Chain</Badge>
                 </div>
               </div>
 
-              {!currentAccount ? (
+              {!ogNFTInfo.packageId ? (
+                <Alert className="border-red-200 bg-red-50">
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  <AlertTitle className="text-red-800">Configuration Required</AlertTitle>
+                  <AlertDescription className="text-red-700">
+                    OG NFT package ID is not configured. Please set NEXT_PUBLIC_OG_NFT_PACKAGE_ID environment variable.
+                  </AlertDescription>
+                </Alert>
+              ) : !currentAccount ? (
                 <Alert>
                   <AlertTitle>Wallet Required</AlertTitle>
                   <AlertDescription>
@@ -138,7 +166,7 @@ export default function MintOGNFTPage() {
                   onClick={handleMint} 
                   className="w-full"
                   size="lg"
-                  disabled={isMinting}
+                  disabled={isMinting || !ogNFTInfo.packageId}
                 >
                   {isMinting ? (
                     <>
@@ -148,7 +176,7 @@ export default function MintOGNFTPage() {
                   ) : (
                     <>
                       <Sparkles className="w-5 h-5 mr-2" />
-                      Mint OG NFT
+                      Mint Free OG NFT
                     </>
                   )}
                 </Button>
@@ -156,7 +184,7 @@ export default function MintOGNFTPage() {
 
               {isMinting && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Please wait while your NFT is being minted on the blockchain...
+                  Please confirm the transaction in your wallet and wait while your NFT is being minted on the SUI blockchain...
                 </p>
               )}
             </CardContent>
@@ -179,7 +207,7 @@ export default function MintOGNFTPage() {
                     <CheckCircle className="h-4 w-4 text-green-600" />
                     <AlertTitle className="text-green-800">Mint Successful!</AlertTitle>
                     <AlertDescription className="text-green-700">
-                      Your OG NFT has been successfully minted!
+                      Your free OG NFT has been successfully minted on the SUI blockchain!
                     </AlertDescription>
                   </Alert>
                   
@@ -202,7 +230,7 @@ export default function MintOGNFTPage() {
                   </div>
                   
                   <Button variant="outline" className="w-full" onClick={() => setMintResult(null)}>
-                    Mint Another NFT
+                    Mint Another Free NFT
                   </Button>
                 </div>
               ) : (
@@ -229,9 +257,9 @@ export default function MintOGNFTPage() {
           <Card className="text-center">
             <CardContent className="p-6">
               <Trophy className="w-12 h-12 mx-auto mb-4 text-primary" />
-              <h3 className="font-semibold mb-2">Exclusive Design</h3>
+              <h3 className="font-semibold mb-2">Free Minting</h3>
               <p className="text-sm text-muted-foreground">
-                Each OG NFT features unique artwork with different rarity levels
+                All OG NFTs are completely free to mint with only gas fees required
               </p>
             </CardContent>
           </Card>
@@ -249,9 +277,9 @@ export default function MintOGNFTPage() {
           <Card className="text-center">
             <CardContent className="p-6">
               <Users className="w-12 h-12 mx-auto mb-4 text-primary" />
-              <h3 className="font-semibold mb-2">Community Access</h3>
+              <h3 className="font-semibold mb-2">Unlimited Supply</h3>
               <p className="text-sm text-muted-foreground">
-                Join the exclusive OG NFT holders community with special privileges
+                No supply limits - everyone can mint as many OG NFTs as they want
               </p>
             </CardContent>
           </Card>
