@@ -29,6 +29,7 @@ export default function HomePage() {
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [joiningRoom, setJoiningRoom] = useState(false)
   const [isContractConfigured, setIsContractConfigured] = useState(true)
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
 
   // Check if contract is properly configured
   useEffect(() => {
@@ -75,13 +76,14 @@ export default function HomePage() {
     }
   }
 
-  // Auto-refresh available rooms periodically to catch rooms from other browsers
+  // Auto-refresh available rooms more frequently to catch rooms from other browsers/devices
   useEffect(() => {
     const intervalId = setInterval(() => {
       console.log("[v0] Auto-refreshing rooms from global storage")
       gameStateManager.refreshRoomsFromGlobalStorage()
       loadAvailableRooms()
-    }, 5000) // Refresh every 5 seconds
+      setLastSyncTime(new Date())
+    }, 2000) // Refresh every 2 seconds for better real-time experience
 
     return () => clearInterval(intervalId)
   }, [])
@@ -321,7 +323,16 @@ export default function HomePage() {
               <CardTitle className="flex items-center gap-2">
                 <Search className="w-5 h-5" />
                 Available Rooms
+                {lastSyncTime && (
+                  <Badge variant="outline" className="ml-auto">
+                    <Clock className="w-3 h-3 mr-1" />
+                    Last sync: {lastSyncTime.toLocaleTimeString()}
+                  </Badge>
+                )}
               </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                🌐 Real-time global room synchronization active - rooms from other devices/browsers appear here
+              </p>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -577,7 +588,16 @@ export default function HomePage() {
             <CardTitle className="flex items-center gap-2">
               <Search className="w-5 h-5" />
               Available Rooms
+              {lastSyncTime && (
+                <Badge variant="outline" className="ml-auto">
+                  <Clock className="w-3 h-3 mr-1" />
+                  Last sync: {lastSyncTime.toLocaleTimeString()}
+                </Badge>
+              )}
             </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              🌐 Real-time global room synchronization active - rooms from other devices/browsers will appear here automatically
+            </p>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

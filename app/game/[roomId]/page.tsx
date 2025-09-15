@@ -27,6 +27,7 @@ export default function GamePage() {
   const [finishingGame, setFinishingGame] = useState(false)
   const [attemptingJoin, setAttemptingJoin] = useState(false)
   const [copiedToClipboard, setCopiedToClipboard] = useState(false)
+  const [isConnectedToGlobalSync, setIsConnectedToGlobalSync] = useState(false)
 
   useEffect(() => {
     if (!currentAccount) {

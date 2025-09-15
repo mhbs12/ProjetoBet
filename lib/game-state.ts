@@ -1,4 +1,5 @@
 import { suiContract } from "./sui-integration"
+import { globalRoomSync, type RoomSyncEvent } from "./global-room-sync"
 
 export interface GameRoom {
   id: string
@@ -23,11 +24,78 @@ class GameStateManager {
   private rooms = new Map<string, GameRoom>()
   private listeners = new Map<string, ((room: GameRoom) => void)[]>()
   private readonly STORAGE_KEY = 'game-rooms'
+  private globalSyncUnsubscribe?: () => void
 
   constructor() {
     this.loadRoomsFromStorage()
     this.loadGlobalRooms()
     this.migrateLegacySharedRooms()
+    this.initializeGlobalSync()
+  }
+
+  private initializeGlobalSync() {
+    // Subscribe to global room synchronization events
+    this.globalSyncUnsubscribe = globalRoomSync.addListener((event: RoomSyncEvent) => {
+      this.handleGlobalSyncEvent(event)
+    })
+    
+    // Start cleanup of expired rooms
+    this.setupCleanupInterval()
+    
+    console.log('[GameState] Global synchronization initialized')
+  }
+
+  private handleGlobalSyncEvent(event: RoomSyncEvent) {
+    console.log('[GameState] Received global sync event:', event.type, event.roomId)
+    
+    switch (event.type) {
+      case 'room_created':
+      case 'room_updated':
+      case 'room_joined':
+        if (event.room && !this.rooms.has(event.room.id)) {
+          // Add room from other session if it doesn't exist locally
+          this.rooms.set(event.room.id, event.room)
+          console.log('[GameState] Added room from global sync:', event.room.id)
+        } else if (event.room && this.rooms.has(event.room.id)) {
+          // Update existing room with latest data
+          const existingRoom = this.rooms.get(event.room.id)!
+          if (event.room.createdAt >= existingRoom.createdAt) {
+            this.rooms.set(event.room.id, event.room)
+            this.notifyListeners(event.room.id, event.room)
+            console.log('[GameState] Updated room from global sync:', event.room.id)
+          }
+        }
+        break
+      
+      case 'room_deleted':
+        if (event.roomId && this.rooms.has(event.roomId)) {
+          this.rooms.delete(event.roomId)
+          console.log('[GameState] Removed room from global sync:', event.roomId)
+        }
+        break
+      
+      case 'rooms_requested':
+        // Respond by syncing our available rooms to global storage
+        this.syncLocalRoomsToGlobal()
+        break
+    }
+  }
+
+  private syncLocalRoomsToGlobal() {
+    // Sync all available rooms to global storage
+    this.rooms.forEach((room) => {
+      if (room.gameState === 'waiting' || (Date.now() - room.createdAt) < 600000) {
+        globalRoomSync.saveRoomToGlobal(room)
+      }
+    })
+  }
+
+  private setupCleanupInterval() {
+    // Clean up expired rooms every 5 minutes
+    setInterval(() => {
+      this.cleanupExpiredRooms()
+      globalRoomSync.cleanupExpiredRooms()
+    }, 300000)
   }
 
   // Allow access to rooms map for testing
@@ -75,23 +143,39 @@ class GameStateManager {
     if (typeof window === 'undefined') return
     
     try {
-      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
-      if (globalRooms) {
-        const roomsData = JSON.parse(globalRooms)
+      // Load from the global sync service
+      const globalRooms = globalRoomSync.getGlobalRooms()
+      
+      Object.entries(globalRooms).forEach(([id, room]) => {
+        // Only load rooms that are still relevant (waiting for players or recently created)
+        const isRelevant = room.gameState === 'waiting' || 
+                         (Date.now() - room.createdAt) < 300000 // 5 minutes
+        
+        if (isRelevant && !this.rooms.has(id)) {
+          this.rooms.set(id, room)
+        }
+      })
+      
+      console.log('[GameState] Loaded global rooms:', Object.keys(globalRooms).length)
+      
+      // Also load from legacy storage for backward compatibility
+      const legacyGlobalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
+      if (legacyGlobalRooms) {
+        const roomsData = JSON.parse(legacyGlobalRooms)
         Object.entries(roomsData).forEach(([id, room]) => {
           const roomData = room as GameRoom
-          // Only load rooms that are still relevant (waiting for players or recently created)
           const isRelevant = roomData.gameState === 'waiting' || 
                            (Date.now() - roomData.createdAt) < 300000 // 5 minutes
           
           if (isRelevant && !this.rooms.has(id)) {
             this.rooms.set(id, roomData)
+            // Migrate to new global sync service
+            globalRoomSync.saveRoomToGlobal(roomData)
           }
         })
-        console.log('[v0] Loaded global rooms:', Object.keys(roomsData).length)
       }
     } catch (error) {
-      console.warn('[v0] Failed to load global rooms from storage:', error)
+      console.warn('[GameState] Failed to load global rooms from storage:', error)
     }
   }
 
@@ -142,6 +226,10 @@ class GameStateManager {
     if (typeof window === 'undefined') return
     
     try {
+      // Save to the new global sync service
+      globalRoomSync.saveRoomToGlobal(room)
+      
+      // Also maintain legacy storage for backward compatibility
       const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
       const roomsData = globalRooms ? JSON.parse(globalRooms) : {}
       
@@ -149,10 +237,10 @@ class GameStateManager {
       if (room.gameState === 'waiting' || (Date.now() - room.createdAt) < 600000) { // 10 minutes
         roomsData[room.id] = room
         localStorage.setItem(GLOBAL_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
-        console.log('[v0] Saved room to global storage:', room.id)
+        console.log('[GameState] Saved room to global storage:', room.id)
       }
     } catch (error) {
-      console.warn('[v0] Failed to save room to global storage:', error)
+      console.warn('[GameState] Failed to save room to global storage:', error)
     }
   }
 
@@ -160,15 +248,19 @@ class GameStateManager {
     if (typeof window === 'undefined') return
     
     try {
+      // Remove from global sync service
+      globalRoomSync.removeRoomFromGlobal(roomId)
+      
+      // Also remove from legacy storage
       const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
       if (globalRooms) {
         const roomsData = JSON.parse(globalRooms)
         delete roomsData[roomId]
         localStorage.setItem(GLOBAL_ROOMS_STORAGE_KEY, JSON.stringify(roomsData))
-        console.log('[v0] Removed room from global storage:', roomId)
+        console.log('[GameState] Removed room from global storage:', roomId)
       }
     } catch (error) {
-      console.warn('[v0] Failed to remove room from global storage:', error)
+      console.warn('[GameState] Failed to remove room from global storage:', error)
     }
   }
 
@@ -256,6 +348,9 @@ class GameStateManager {
       this.saveToSharedStorage(room) // Save to global storage for cross-browser/wallet visibility
       this.notifyListeners(roomId, room)
 
+      // Announce room creation to all connected sessions
+      globalRoomSync.announceRoomCreated(room)
+
       if (!treasuryObject?.objectId) {
         console.warn("[v0] Warning: Treasury object ID not found in transaction result. Room created but may have issues with betting.")
         console.warn("[v0] This could be due to smart contract returning different object types than expected.")
@@ -299,6 +394,9 @@ class GameStateManager {
     this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
     this.notifyListeners(roomId, room)
+
+    // Announce presence update to other sessions
+    globalRoomSync.announceRoomUpdated(room)
     
     return room
   }
@@ -470,6 +568,9 @@ class GameStateManager {
       this.removeFromSharedStorage(roomId)
       this.notifyListeners(roomId, room)
 
+      // Announce successful room join to all sessions
+      globalRoomSync.announceRoomJoined(room)
+
       console.log("[v0] Player joined successfully, room updated:", room)
       return room
     } catch (error) {
@@ -502,6 +603,9 @@ class GameStateManager {
     this.saveRoomsToStorage()
     this.removeFromSharedStorage(roomId) // Remove finished game from shared storage
     this.notifyListeners(roomId, room)
+
+    // Announce game completion to all sessions
+    globalRoomSync.announceRoomUpdated(room)
   }
 
   makeMove(roomId: string, position: number, player: string): GameRoom | null {
@@ -528,6 +632,10 @@ class GameStateManager {
     this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
     this.notifyListeners(roomId, room)
+
+    // Announce move to all sessions
+    globalRoomSync.announceRoomUpdated(room)
+    
     return room
   }
 
@@ -634,6 +742,13 @@ class GameStateManager {
   // Method to refresh rooms from global storage (useful for polling for new rooms)
   refreshRoomsFromGlobalStorage(): void {
     this.loadGlobalRooms()
+    
+    // Also trigger a rooms request to get updates from other sessions
+    globalRoomSync.broadcastEvent({
+      type: 'rooms_requested',
+      timestamp: Date.now(),
+      senderId: 'refresh-request'
+    })
   }
 
   // Method to get the current number of available rooms
@@ -646,15 +761,20 @@ class GameStateManager {
     if (typeof window === 'undefined') return false
     
     try {
-      const globalRooms = localStorage.getItem(GLOBAL_ROOMS_STORAGE_KEY)
-      if (globalRooms) {
-        const roomsData = JSON.parse(globalRooms)
-        return roomsData.hasOwnProperty(roomId)
-      }
+      const globalRooms = globalRoomSync.getGlobalRooms()
+      return globalRooms.hasOwnProperty(roomId)
     } catch (error) {
-      console.warn('[v0] Failed to check room in global storage:', error)
+      console.warn('[GameState] Failed to check room in global storage:', error)
     }
     return false
+  }
+
+  // Cleanup method to destroy global sync
+  destroy() {
+    if (this.globalSyncUnsubscribe) {
+      this.globalSyncUnsubscribe()
+    }
+    globalRoomSync.destroy()
   }
 }
 
