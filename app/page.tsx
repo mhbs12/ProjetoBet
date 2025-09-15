@@ -75,6 +75,17 @@ export default function HomePage() {
     }
   }
 
+  // Auto-refresh available rooms periodically to catch rooms from other browsers
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      console.log("[v0] Auto-refreshing rooms from global storage")
+      gameStateManager.refreshRoomsFromGlobalStorage()
+      loadAvailableRooms()
+    }, 5000) // Refresh every 5 seconds
+
+    return () => clearInterval(intervalId)
+  }, [])
+
   // Create mock rooms for testing (TODO: Remove in production)
   const createMockRooms = () => {
     const mockRooms = [
