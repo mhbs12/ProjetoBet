@@ -228,7 +228,14 @@ export default function GamePage() {
               Back to Lobby
             </Button>
           </Link>
-          <h1 className="text-2xl font-bold">Room {room.id}</h1>
+          <h1 className="text-2xl font-bold">
+            {room.name || "Game Room"}
+            {room.treasuryId && (
+              <span className="text-lg font-normal text-muted-foreground ml-2">
+                ({room.treasuryId.slice(0, 8)}...{room.treasuryId.slice(-4)})
+              </span>
+            )}
+          </h1>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -286,17 +293,13 @@ export default function GamePage() {
                             <Copy className="w-4 h-4 mr-2" />
                             {copiedToClipboard ? "Copied!" : "Copy Link"}
                           </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Share this link or Treasury ID: <span className="font-mono">{room.treasuryId.slice(0, 12)}...{room.treasuryId.slice(-6)}</span>
+                          </p>
                         </div>
                       ) : (
-                        <p className="font-mono text-lg font-bold">{room.id}</p>
+                        <p className="text-sm text-amber-600 font-medium">Treasury ID not available - room cannot be joined by others</p>
                       )}
-                    </div>
-                  )}
-                  
-                  {room.treasuryId && (
-                    <div className="mt-4 p-3 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">Treasury Created:</p>
-                      <p className="font-mono text-xs break-all">{room.treasuryId}</p>
                     </div>
                   )}
                 </CardContent>
@@ -368,15 +371,13 @@ export default function GamePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Room ID</p>
-                  <p className="font-mono text-sm">{room.id}</p>
-                </div>
-
                 {room.treasuryId && (
                   <div>
-                    <p className="text-sm text-muted-foreground">Treasury ID</p>
-                    <p className="font-mono text-xs break-all">{room.treasuryId}</p>
+                    <p className="text-sm text-muted-foreground font-semibold">Treasury ID</p>
+                    <p className="font-mono text-xs break-all bg-muted p-2 rounded">{room.treasuryId}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Share this ID with other players to invite them
+                    </p>
                   </div>
                 )}
 
