@@ -209,11 +209,17 @@ class SimpleRoomManager {
         room.gameState = "playing"
         room.currentPlayer = room.players[0] // First player (creator) starts
         console.log("[v0] Room is full, starting game automatically")
+        
+        // Update the room immediately and broadcast the state change
+        this.rooms.set(treasuryId, room)
+        this.notifyListeners(treasuryId, room)
+        
+        console.log("[v0] Game started! Broadcasting room state to all players")
+      } else {
+        // Update the room for single player case
+        this.rooms.set(treasuryId, room)
+        this.notifyListeners(treasuryId, room)
       }
-
-      // Update the room
-      this.rooms.set(treasuryId, room)
-      this.notifyListeners(treasuryId, room)
 
       console.log("[v0] Player joined successfully, room updated:", room)
       return room
@@ -331,6 +337,31 @@ class SimpleRoomManager {
   private notifyListeners(treasuryId: string, room: SimpleRoom): void {
     const callbacks = this.listeners.get(treasuryId) || []
     callbacks.forEach((callback) => callback(room))
+    
+    // Also broadcast via WebSocket API for real-time sync
+    this.broadcastRoomUpdate(treasuryId, room)
+  }
+
+  /**
+   * Broadcast room update via Server-Sent Events API
+   */
+  private async broadcastRoomUpdate(roomId: string, roomData: SimpleRoom): Promise<void> {
+    try {
+      await fetch('/api/socket', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          roomData
+        })
+      })
+      console.log('[v0] Room update broadcasted via SSE:', roomId)
+    } catch (error) {
+      console.warn('[v0] Failed to broadcast room update via SSE:', error)
+      // Don't throw error - local updates should still work
+    }
   }
 
   private checkWinner(board: (string | null)[]): string | null {
