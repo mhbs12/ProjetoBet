@@ -346,13 +346,17 @@ export class SuiGameContract {
       if (transaction.objectChanges) {
         console.log(`[v0] Analyzing object changes for treasury:`, JSON.stringify(transaction.objectChanges, null, 2))
         
+        let treasuryObject = null
+        let strategyUsed = "none"
+        
         // Strategy 1: Look for objects with treasury-related names (case insensitive)
-        let treasuryObject = transaction.objectChanges.find(
+        treasuryObject = transaction.objectChanges.find(
           (change: any) => change.type === "created" && change.objectType && 
           (change.objectType.toLowerCase().includes("treasury") || 
            change.objectType.toLowerCase().includes("::treasury") ||
            change.objectType.includes("Treasury"))
         )
+        if (treasuryObject) strategyUsed = "treasury-name"
         
         // Strategy 2: Look for objects from the bet module 
         if (!treasuryObject) {
@@ -360,6 +364,7 @@ export class SuiGameContract {
             (change: any) => change.type === "created" && change.objectType && 
             change.objectType.includes("::bet::")
           )
+          if (treasuryObject) strategyUsed = "bet-module"
         }
         
         // Strategy 3: Look for any shared object (treasury is shared via transfer::share_object)
@@ -368,6 +373,7 @@ export class SuiGameContract {
             (change: any) => change.type === "created" && change.objectId && 
             (change.sender === undefined || change.sender === null) // Shared objects often don't have sender
           )
+          if (treasuryObject) strategyUsed = "shared-object"
         }
         
         // Strategy 4: Look for any created object as ultimate fallback
@@ -375,10 +381,26 @@ export class SuiGameContract {
           treasuryObject = transaction.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId
           )
+          if (treasuryObject) strategyUsed = "any-created"
+        }
+        
+        // Strategy 5: Enhanced fallback - analyze all created objects
+        if (!treasuryObject) {
+          console.log(`[v0] Standard strategies failed. Analyzing all created objects in transaction...`)
+          const allCreatedObjects = transaction.objectChanges.filter(
+            (change: any) => change.type === "created"
+          )
+          console.log(`[v0] Found ${allCreatedObjects.length} created objects:`, allCreatedObjects)
+          
+          if (allCreatedObjects.length > 0) {
+            treasuryObject = allCreatedObjects[0]
+            strategyUsed = "first-created-fallback"
+            console.log(`[v0] Using first created object as fallback:`, treasuryObject)
+          }
         }
         
         if (treasuryObject?.objectId) {
-          console.log(`[v0] Treasury ID found in transaction:`, treasuryObject.objectId)
+          console.log(`[v0] Treasury ID found using strategy '${strategyUsed}':`, treasuryObject.objectId)
           console.log(`[v0] Treasury object details:`, treasuryObject)
           return treasuryObject.objectId
         }

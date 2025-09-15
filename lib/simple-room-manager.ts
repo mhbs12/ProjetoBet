@@ -37,6 +37,7 @@ class SimpleRoomManager {
         
         // Look for the treasury object in the transaction result with multiple strategies
         let treasuryObject = null
+        let strategyUsed = "none"
         
         // Strategy 1: Look for objects with treasury-related names (case insensitive)
         treasuryObject = result.objectChanges.find(
@@ -45,6 +46,7 @@ class SimpleRoomManager {
            change.objectType.toLowerCase().includes("::treasury") ||
            change.objectType.includes("Treasury"))
         )
+        if (treasuryObject) strategyUsed = "treasury-name"
         
         // Strategy 2: Look for objects from the bet module 
         if (!treasuryObject) {
@@ -52,6 +54,7 @@ class SimpleRoomManager {
             (change: any) => change.type === "created" && change.objectType && 
             change.objectType.includes("::bet::")
           )
+          if (treasuryObject) strategyUsed = "bet-module"
         }
         
         // Strategy 3: Look for any shared object (treasury is shared via transfer::share_object)
@@ -60,6 +63,7 @@ class SimpleRoomManager {
             (change: any) => change.type === "created" && change.objectId && 
             (change.sender === undefined || change.sender === null) // Shared objects often don't have sender
           )
+          if (treasuryObject) strategyUsed = "shared-object"
         }
         
         // Strategy 4: Look for any created object as ultimate fallback
@@ -67,15 +71,37 @@ class SimpleRoomManager {
           treasuryObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId
           )
+          if (treasuryObject) strategyUsed = "any-created"
+        }
+        
+        // Strategy 5: Enhanced search - look at all created objects and log them
+        if (!treasuryObject) {
+          console.log("[v0] No treasury found with standard strategies. Analyzing all created objects...")
+          const allCreatedObjects = result.objectChanges.filter(
+            (change: any) => change.type === "created"
+          )
+          console.log("[v0] All created objects:", JSON.stringify(allCreatedObjects, null, 2))
+          
+          // Pick the first created object as fallback
+          if (allCreatedObjects.length > 0) {
+            treasuryObject = allCreatedObjects[0]
+            strategyUsed = "first-created"
+            console.log("[v0] Using first created object as treasury:", treasuryObject)
+          }
         }
         
         treasuryId = treasuryObject?.objectId
         
         if (treasuryId) {
-          console.log("[v0] Treasury ID extracted using strategy, object details:", treasuryObject)
+          console.log(`[v0] Treasury ID extracted using strategy '${strategyUsed}':`, treasuryId)
+          console.log("[v0] Treasury object details:", treasuryObject)
         } else {
           console.error("[v0] Failed to find treasury object in transaction changes")
+          console.error("[v0] Available object changes:", result.objectChanges)
         }
+      } else {
+        console.warn("[v0] No objectChanges in transaction result")
+        console.warn("[v0] Full result structure:", Object.keys(result))
       }
 
       // Additional fallback: try to get treasury from transaction digest if objectChanges failed
@@ -96,13 +122,26 @@ class SimpleRoomManager {
           objectChangesCount: result.objectChanges?.length || 0,
           objectChanges: result.objectChanges || [],
           extractionAttempted: true,
-          fallbackAttempted: !!result.digest
+          fallbackAttempted: !!result.digest,
+          availableKeys: Object.keys(result),
+          // Add more context for debugging
+          transactionStatus: result.confirmedLocalExecution || result.status || "unknown",
+          hasEffects: !!result.effects,
+          hasBalanceChanges: !!result.balanceChanges
         }
         
         console.error("[v0] All treasury extraction strategies failed. Error details:", JSON.stringify(errorDetails, null, 2))
         console.error("[v0] Full transaction result:", JSON.stringify(result, null, 2))
         
-        throw new Error(`Failed to extract treasury ID from transaction. Please try again or contact support if the issue persists. Transaction: ${result.digest || 'unknown'}`)
+        throw new Error(`Failed to extract treasury ID from transaction. This might be due to:
+1. Smart contract not configured properly
+2. Transaction failed to create treasury object
+3. Different object naming in the smart contract
+4. Network connectivity issues
+
+Please try again or contact support if the issue persists. 
+Transaction: ${result.digest || 'unknown'}
+Object Changes: ${result.objectChanges?.length || 0} objects created`)
       }
 
       console.log("[v0] Treasury ID extracted successfully:", treasuryId)
@@ -111,6 +150,12 @@ class SimpleRoomManager {
       if (treasuryId && (treasuryId.length < 10 || !treasuryId.startsWith('0x'))) {
         console.warn("[v0] Treasury ID may be invalid format:", treasuryId)
         // Don't throw error here, let the subsequent treasury validation catch it
+      }
+      
+      // Additional validation: Ensure the treasury ID is a proper hex string
+      if (treasuryId && !/^0x[a-fA-F0-9]+$/.test(treasuryId)) {
+        console.warn("[v0] Treasury ID contains invalid characters:", treasuryId)
+        console.warn("[v0] This might cause issues when accessing the treasury")
       }
 
       // Create the room object using treasury ID as the key
