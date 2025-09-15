@@ -48,7 +48,7 @@ export class SuiGameContract {
     }
   }
 
-  async createBettingRoom(walletAddress: string, betAmount: number, signAndExecuteTransaction: any) {
+  async createRoom(walletAddress: string, betAmount: number, signAndExecuteTransaction: any) {
     if (!this.validateContract()) {
       throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID environment variable.")
     }
@@ -67,7 +67,7 @@ export class SuiGameContract {
     }
 
     try {
-      console.log(`[v0] Creating betting room: wallet=${walletAddress}, amount=${betAmount} SUI`)
+      console.log(`[v0] Creating room: wallet=${walletAddress}, amount=${betAmount} SUI`)
       
       const tx = new Transaction()
       
@@ -82,13 +82,13 @@ export class SuiGameContract {
       // Split coins from gas to create the bet amount
       const [coin] = tx.splitCoins(tx.gas, [amountInMist])
 
-      // Call the move function with correct arguments: SUI object and bet amount
+      // Call the correct move function as specified in requirements
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::bet::criar_aposta`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::criar_sala`,
         arguments: [coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::criar_aposta with coin and amount ${amountInMist}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::criar_sala with coin and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       // The signAndExecuteTransaction is a mutate function that returns a promise
@@ -110,10 +110,10 @@ export class SuiGameContract {
         )
       })
     } catch (error) {
-      console.error("Error creating betting room:", error)
+      console.error("Error creating room:", error)
       
       // Provide more helpful error messages
-      let userFriendlyMessage = "Failed to create betting room"
+      let userFriendlyMessage = "Failed to create room"
       
       if (error.message.includes("Contract not configured")) {
         userFriendlyMessage = "Smart contract not configured. Please contact the administrator."
@@ -129,7 +129,7 @@ export class SuiGameContract {
     }
   }
 
-  async joinBettingRoom(treasuryId: string, betAmount: number, signAndExecuteTransaction: any) {
+  async joinRoom(treasuryId: string, betAmount: number, signAndExecuteTransaction: any) {
     if (!this.validateContract()) {
       throw new Error("Contract not configured. Please set NEXT_PUBLIC_CONTRACT_PACKAGE_ID environment variable.")
     }
@@ -144,7 +144,7 @@ export class SuiGameContract {
     }
 
     try {
-      console.log(`[v0] Joining betting room: treasury=${treasuryId}, amount=${betAmount} SUI`)
+      console.log(`[v0] Joining room: treasury=${treasuryId}, amount=${betAmount} SUI`)
       
       const tx = new Transaction()
       
@@ -159,13 +159,13 @@ export class SuiGameContract {
       // Split coins from gas to create the bet amount
       const [coin] = tx.splitCoins(tx.gas, [amountInMist])
 
-      // Call the move function with correct arguments order: treasury first (by reference), then coin, then amount
+      // Call the correct move function as specified in requirements
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::bet::entrar_aposta`,
+        target: `${CONTRACT_PACKAGE_ID}::bet::EntrarOnTheLineSala`,
         arguments: [tx.object(treasuryId), coin, tx.pure.u64(amountInMist)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::entrar_aposta with treasury ${treasuryId}, coin, and amount ${amountInMist}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::bet::EntrarOnTheLineSala with treasury ${treasuryId}, coin, and amount ${amountInMist}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       return new Promise((resolve, reject) => {
@@ -186,10 +186,10 @@ export class SuiGameContract {
         )
       })
     } catch (error) {
-      console.error("Error joining betting room:", error)
+      console.error("Error joining room:", error)
       
       // Provide more helpful error messages
-      let userFriendlyMessage = "Failed to join betting room"
+      let userFriendlyMessage = "Failed to join room"
       
       if (error.message.includes("Contract not configured")) {
         userFriendlyMessage = "Smart contract not configured. Please contact the administrator."
