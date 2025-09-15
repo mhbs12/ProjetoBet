@@ -340,17 +340,37 @@ export class SuiGameContract {
       
       const transaction = await this.client.getTransactionBlock({
         digest: transactionDigest,
-        options: { showObjectChanges: true },
+        options: { showObjectChanges: true, showEffects: true },
       })
 
       if (transaction.objectChanges) {
-        // Try multiple approaches to find the treasury object
+        console.log(`[v0] Analyzing object changes for treasury:`, JSON.stringify(transaction.objectChanges, null, 2))
+        
+        // Strategy 1: Look for objects with treasury-related names (case insensitive)
         let treasuryObject = transaction.objectChanges.find(
           (change: any) => change.type === "created" && change.objectType && 
-          (change.objectType.includes("Treasury") || change.objectType.includes("treasury"))
+          (change.objectType.toLowerCase().includes("treasury") || 
+           change.objectType.toLowerCase().includes("::treasury") ||
+           change.objectType.includes("Treasury"))
         )
         
-        // Fallback: look for any created object that might be the treasury
+        // Strategy 2: Look for objects from the bet module 
+        if (!treasuryObject) {
+          treasuryObject = transaction.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectType && 
+            change.objectType.includes("::bet::")
+          )
+        }
+        
+        // Strategy 3: Look for any shared object (treasury is shared via transfer::share_object)
+        if (!treasuryObject) {
+          treasuryObject = transaction.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectId && 
+            (change.sender === undefined || change.sender === null) // Shared objects often don't have sender
+          )
+        }
+        
+        // Strategy 4: Look for any created object as ultimate fallback
         if (!treasuryObject) {
           treasuryObject = transaction.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId
@@ -359,11 +379,13 @@ export class SuiGameContract {
         
         if (treasuryObject?.objectId) {
           console.log(`[v0] Treasury ID found in transaction:`, treasuryObject.objectId)
+          console.log(`[v0] Treasury object details:`, treasuryObject)
           return treasuryObject.objectId
         }
       }
       
       console.warn(`[v0] No treasury object found in transaction:`, transactionDigest)
+      console.warn(`[v0] Full transaction details:`, JSON.stringify(transaction, null, 2))
       return null
     } catch (error) {
       console.error(`[v0] Error retrieving treasury from transaction:`, error)

@@ -33,27 +33,85 @@ class SimpleRoomManager {
       let treasuryId = null
       
       if (result.objectChanges) {
-        // Look for the treasury object in the transaction result
-        const treasuryObject = result.objectChanges.find(
+        console.log("[v0] Analyzing transaction object changes:", JSON.stringify(result.objectChanges, null, 2))
+        
+        // Look for the treasury object in the transaction result with multiple strategies
+        let treasuryObject = null
+        
+        // Strategy 1: Look for objects with treasury-related names (case insensitive)
+        treasuryObject = result.objectChanges.find(
           (change: any) => change.type === "created" && change.objectType && 
           (change.objectType.toLowerCase().includes("treasury") || 
-           change.objectType.includes("::bet::") ||
+           change.objectType.toLowerCase().includes("::treasury") ||
            change.objectType.includes("Treasury"))
         )
         
-        // Fallback: look for any created object
-        const fallbackObject = result.objectChanges.find(
-          (change: any) => change.type === "created" && change.objectId
-        )
+        // Strategy 2: Look for objects from the bet module 
+        if (!treasuryObject) {
+          treasuryObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectType && 
+            change.objectType.includes("::bet::")
+          )
+        }
         
-        treasuryId = treasuryObject?.objectId || fallbackObject?.objectId
+        // Strategy 3: Look for any shared object (treasury is shared via transfer::share_object)
+        if (!treasuryObject) {
+          treasuryObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectId && 
+            (change.sender === undefined || change.sender === null) // Shared objects often don't have sender
+          )
+        }
+        
+        // Strategy 4: Look for any created object as ultimate fallback
+        if (!treasuryObject) {
+          treasuryObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectId
+          )
+        }
+        
+        treasuryId = treasuryObject?.objectId
+        
+        if (treasuryId) {
+          console.log("[v0] Treasury ID extracted using strategy, object details:", treasuryObject)
+        } else {
+          console.error("[v0] Failed to find treasury object in transaction changes")
+        }
+      }
+
+      // Additional fallback: try to get treasury from transaction digest if objectChanges failed
+      if (!treasuryId && result.digest) {
+        console.log("[v0] Attempting to extract treasury ID from transaction digest:", result.digest)
+        treasuryId = await suiContract.getTreasuryFromTransaction(result.digest)
+        
+        if (treasuryId) {
+          console.log("[v0] Treasury ID extracted from transaction digest:", treasuryId)
+        }
       }
 
       if (!treasuryId) {
-        throw new Error("Failed to extract treasury ID from transaction. Unable to create room.")
+        // Create a detailed error message for debugging
+        const errorDetails = {
+          transactionDigest: result.digest || "unknown",
+          hasObjectChanges: !!result.objectChanges,
+          objectChangesCount: result.objectChanges?.length || 0,
+          objectChanges: result.objectChanges || [],
+          extractionAttempted: true,
+          fallbackAttempted: !!result.digest
+        }
+        
+        console.error("[v0] All treasury extraction strategies failed. Error details:", JSON.stringify(errorDetails, null, 2))
+        console.error("[v0] Full transaction result:", JSON.stringify(result, null, 2))
+        
+        throw new Error(`Failed to extract treasury ID from transaction. Please try again or contact support if the issue persists. Transaction: ${result.digest || 'unknown'}`)
       }
 
       console.log("[v0] Treasury ID extracted successfully:", treasuryId)
+
+      // Validate the treasury ID format (should be a valid Sui object ID)
+      if (treasuryId && (treasuryId.length < 10 || !treasuryId.startsWith('0x'))) {
+        console.warn("[v0] Treasury ID may be invalid format:", treasuryId)
+        // Don't throw error here, let the subsequent treasury validation catch it
+      }
 
       // Create the room object using treasury ID as the key
       const room: SimpleRoom = {
@@ -72,6 +130,21 @@ class SimpleRoomManager {
       this.notifyListeners(treasuryId, room)
 
       console.log("[v0] Room created successfully with treasury ID:", treasuryId)
+      
+      // Optional: Verify treasury is accessible (don't fail room creation if this fails)
+      try {
+        console.log("[v0] Verifying treasury accessibility...")
+        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId, 1) // Only 1 retry for verification
+        if (treasuryInfo) {
+          console.log("[v0] Treasury verification successful:", treasuryInfo)
+        } else {
+          console.warn("[v0] Treasury verification failed - treasury may need time to propagate")
+        }
+      } catch (verificationError) {
+        console.warn("[v0] Treasury verification failed (non-critical):", verificationError.message)
+        // Don't throw error here - room creation was successful, this is just verification
+      }
+      
       return treasuryId
 
     } catch (error) {
