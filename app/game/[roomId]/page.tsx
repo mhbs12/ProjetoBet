@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { GameBoard } from "@/components/game-board"
 import { WalletConnect } from "@/components/wallet-connect"
-import { ArrowLeft, Coins, Users, Clock, Loader2, Copy } from "lucide-react"
+import { ArrowLeft, Coins, Users, Clock, Loader2, Copy, Wifi, WifiOff } from "lucide-react"
 import { simpleRoomManager } from "@/lib/simple-room-manager"
 import type { SimpleRoom } from "@/lib/simple-room-manager"
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit"
+import { useWebSocketRoomSync } from "@/hooks/use-websocket-room"
 import Link from "next/link"
 
 export default function GamePage() {
@@ -26,6 +27,26 @@ export default function GamePage() {
   const [finishingGame, setFinishingGame] = useState(false)
   const [loading, setLoading] = useState(true)
   const [copiedToClipboard, setCopiedToClipboard] = useState(false)
+
+  // WebSocket integration for real-time room sync
+  const { connected: wsConnected, roomState: wsRoomState, error: wsError, broadcastRoomUpdate } = useWebSocketRoomSync(treasuryId)
+
+  // Update room state when WebSocket receives updates
+  useEffect(() => {
+    if (wsRoomState && wsRoomState.treasuryId === treasuryId) {
+      console.log("[v0] WebSocket room state update received:", wsRoomState)
+      setRoom(wsRoomState)
+      
+      // Update player symbol based on position in players array
+      const isPlayerX = wsRoomState.players[0] === currentAccount?.address
+      setPlayerSymbol(isPlayerX ? "X" : "O")
+
+      // Handle automatic game finishing when there's a winner
+      if (wsRoomState.gameState === "finished" && wsRoomState.winner && !finishingGame) {
+        handleGameFinish(wsRoomState)
+      }
+    }
+  }, [wsRoomState, treasuryId, currentAccount, finishingGame])
 
   useEffect(() => {
     if (!currentAccount) {
@@ -105,6 +126,7 @@ export default function GamePage() {
     const updatedRoom = simpleRoomManager.makeMove(treasuryId, position, currentAccount.address)
     if (updatedRoom) {
       setRoom(updatedRoom)
+      // The room manager will automatically broadcast the update via WebSocket
     }
   }
 
@@ -171,6 +193,24 @@ export default function GamePage() {
               ({treasuryId.slice(0, 8)}...{treasuryId.slice(-4)})
             </span>
           </h1>
+          
+          {/* WebSocket connection status */}
+          <div className="flex items-center gap-2 text-sm">
+            {wsConnected ? (
+              <>
+                <Wifi className="w-4 h-4 text-green-500" />
+                <span className="text-green-600">Conectado em tempo real</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-orange-500" />
+                <span className="text-orange-600">Reconectando...</span>
+              </>
+            )}
+            {wsError && (
+              <span className="text-red-600 text-xs">({wsError})</span>
+            )}
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
