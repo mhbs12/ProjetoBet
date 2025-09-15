@@ -540,19 +540,17 @@ class GameStateManager {
       room.players.push(playerAddress)
       room.playersPresent.push(playerAddress) // Mark joining player as present
       
-      // Only start the game if the creator is also present
-      const creatorAddress = room.players[0]
-      const isCreatorPresent = room.playersPresent.includes(creatorAddress)
-      
-      if (isCreatorPresent && room.players.length === 2) {
+      // If room has 2 players, automatically mark both as present and start the game
+      if (room.players.length === 2) {
+        const creatorAddress = room.players[0]
+        if (!room.playersPresent.includes(creatorAddress)) {
+          room.playersPresent.push(creatorAddress)
+          console.log("[v0] Auto-marked creator as present when second player joined")
+        }
+        
+        // Start the game immediately when both players are in the room
         room.gameState = "playing"
-        console.log("[v0] Both players present, starting game")
-      } else {
-        console.log("[v0] Waiting for creator to be present:", {
-          creatorAddress,
-          isCreatorPresent,
-          playersPresent: room.playersPresent
-        })
+        console.log("[v0] Both players in room, game started automatically")
       }
       
       // Set the first player as current player if none was set
