@@ -53,10 +53,16 @@ export default function GamePage() {
       const isPlayerX = currentRoom.players[0] === currentAccount.address
       setPlayerSymbol(isPlayerX ? "X" : "O")
     } else if (treasuryId) {
-      // If no local room but we have treasury ID from URL, attempt to join
-      console.log("[v0] No local room found but treasury ID provided, attempting to join...")
+      // If no local room but we have treasury ID from URL, attempt to access the room
+      console.log("[v0] No local room found but treasury ID provided, attempting to access room...")
       setAttemptingJoin(true)
-      handleAutoJoin()
+      handleTreasuryBasedRoomAccess()
+    } else {
+      // No room found and no treasury ID provided
+      console.error("[v0] Room not found and no treasury ID provided")
+      alert("Room not found. Please check the room link or ID.")
+      router.push("/")
+      return
     }
 
     // Subscribe to room updates
@@ -73,39 +79,44 @@ export default function GamePage() {
     return unsubscribe
   }, [roomId, router, currentAccount, treasuryId])
 
-  const handleAutoJoin = async () => {
+  const handleTreasuryBasedRoomAccess = async () => {
     if (!currentAccount || !treasuryId) return
 
     try {
-      console.log("[v0] Auto-joining room with treasury ID:", treasuryId)
-      const joinedRoom = await gameStateManager.joinRoom(
+      console.log("[v0] Accessing room via treasury ID:", treasuryId)
+      
+      // First, try to get or create the room using the treasury ID
+      const accessedRoom = await gameStateManager.accessRoomByTreasury(
         roomId,
-        currentAccount.address,
-        signAndExecuteTransaction,
         treasuryId,
-        undefined  // Use room's default bet amount for auto-join
+        currentAccount.address,
+        signAndExecuteTransaction
       )
 
-      setRoom(joinedRoom)
-      // The joining player is always "O" since they're the second player
-      setPlayerSymbol("O")
+      setRoom(accessedRoom)
+      
+      // Determine player symbol based on position in players array
+      const isPlayerX = accessedRoom.players[0] === currentAccount.address
+      setPlayerSymbol(isPlayerX ? "X" : "O")
+      
+      console.log("[v0] Successfully accessed room via treasury ID")
     } catch (error) {
-      console.error("[v0] Failed to auto-join room:", error)
+      console.error("[v0] Failed to access room via treasury:", error)
       
       // Provide more user-friendly error messages
-      let userMessage = "Failed to join room"
+      let userMessage = "Failed to access room"
       if (error.message.includes("not found")) {
-        userMessage = "Room not found. The room may have expired or the link is invalid."
+        userMessage = "Room not found. The treasury may be invalid or the room may have expired."
       } else if (error.message.includes("full")) {
         userMessage = "This room is already full. Please try joining a different room."
       } else if (error.message.includes("already in room")) {
         userMessage = "You are already in this room."
       } else if (error.message.includes("Treasury")) {
-        userMessage = "Unable to access room treasury. The room may be invalid or expired."
+        userMessage = "Unable to access room treasury. The treasury may be invalid or expired."
       } else if (error.message.includes("Transaction failed")) {
         userMessage = "Transaction failed. Please check your wallet connection and try again."
       } else {
-        userMessage = `Failed to join room: ${error.message}`
+        userMessage = `Failed to access room: ${error.message}`
       }
       
       alert(userMessage)
@@ -169,7 +180,7 @@ export default function GamePage() {
         <Card>
           <CardContent className="p-6 text-center">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-            <p>{attemptingJoin ? "Joining room..." : "Loading game..."}</p>
+            <p>{attemptingJoin ? "Accessing room..." : "Loading game..."}</p>
             {treasuryId && (
               <p className="text-xs text-muted-foreground mt-2">
                 Treasury: {treasuryId.slice(0, 8)}...{treasuryId.slice(-4)}
