@@ -29,7 +29,13 @@ export default function GamePage() {
   const [copiedToClipboard, setCopiedToClipboard] = useState(false)
 
   // WebSocket integration for real-time room sync
-  const { connected: wsConnected, roomState: wsRoomState, error: wsError, broadcastRoomUpdate } = useWebSocketRoomSync(roomId)
+  const { 
+    connected: wsConnected, 
+    connectionReady: wsConnectionReady,
+    roomState: wsRoomState, 
+    error: wsError, 
+    broadcastRoomUpdate 
+  } = useWebSocketRoomSync(roomId)
 
   // Helper function to convert SimpleRoom to GameState
   const createGameStateFromRoom = (room: SimpleRoom) => {
@@ -83,6 +89,8 @@ export default function GamePage() {
   const loadRoom = async () => {
     setLoading(true)
     try {
+      console.log("[v0] Loading room with WebSocket state - connected:", wsConnected, "ready:", wsConnectionReady)
+      
       // Try to get the room using room ID with blockchain fallback
       const currentRoom = await simpleRoomManager.getOrLoadRoom(roomId)
       
@@ -96,6 +104,16 @@ export default function GamePage() {
         // If current player is not in the room but room exists, they might need to join
         if (currentAccount && !currentRoom.players.includes(currentAccount.address)) {
           console.log("[v0] Current player not in room, they may need to join")
+        } else if (currentAccount && currentRoom.players.includes(currentAccount.address)) {
+          // Player is already in room, ensure state synchronization via WebSocket
+          console.log("[v0] Player is in room, ensuring WebSocket state sync")
+          
+          // Use enterRoom to ensure proper state synchronization
+          const syncedRoom = await simpleRoomManager.enterRoom(roomId, currentAccount.address)
+          if (syncedRoom) {
+            setRoom(syncedRoom)
+            console.log("[v0] Room state synchronized successfully")
+          }
         }
       } else {
         // Room not found locally or on blockchain
@@ -105,7 +123,7 @@ export default function GamePage() {
 
       // Subscribe to room updates
       const unsubscribe = simpleRoomManager.subscribeToRoom(roomId, (updatedRoom) => {
-        console.log("[v0] Room updated:", updatedRoom)
+        console.log("[v0] Room updated via subscription:", updatedRoom)
         setRoom(updatedRoom)
 
         // Handle automatic game finishing when there's a winner
@@ -243,10 +261,15 @@ export default function GamePage() {
           
           {/* Real-time connection status */}
           <div className="flex items-center gap-2 text-sm">
-            {wsConnected ? (
+            {wsConnected && wsConnectionReady ? (
               <>
                 <Wifi className="w-4 h-4 text-green-500" />
                 <span className="text-green-600">Conectado em tempo real</span>
+              </>
+            ) : wsConnected && !wsConnectionReady ? (
+              <>
+                <Wifi className="w-4 h-4 text-yellow-500" />
+                <span className="text-yellow-600">Conectando...</span>
               </>
             ) : (
               <>
