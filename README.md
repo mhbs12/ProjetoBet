@@ -28,6 +28,14 @@ A decentralized TicTacToe betting platform built on the SUI blockchain. Players 
    ```bash
    cp .env.local.example .env.local
    # Edit .env.local with your contract package IDs
+   ```
+
+4. **Deploy to Vercel** 
+   ```bash
+   # The project is pre-configured for Vercel deployment
+   # Simply connect your GitHub repository to Vercel
+   # Environment variables will be automatically configured
+   ```
    NEXT_PUBLIC_CONTRACT_PACKAGE_ID=0xYOUR_BETTING_PACKAGE_ID_HERE
    NEXT_PUBLIC_OG_NFT_PACKAGE_ID=0xYOUR_OG_NFT_PACKAGE_ID_HERE
    ```
@@ -96,6 +104,36 @@ module 0x0::teste2 {
     // ... (contract implementation)
 }
 
+## Deployment
+
+### Deploy to Vercel
+
+This project is optimized for Vercel deployment:
+
+1. **Connect Repository**
+   - Import your GitHub repository to Vercel
+   - Vercel will automatically detect this as a Next.js project
+
+2. **Environment Variables**
+   Set these in your Vercel project settings:
+   ```
+   NEXT_PUBLIC_SUI_NETWORK=devnet
+   NEXT_PUBLIC_SUI_PACKAGE_ID=your_contract_package_id
+   NEXT_PUBLIC_OG_NFT_PACKAGE_ID=your_nft_package_id
+   ```
+
+3. **Deploy**
+   - Vercel will automatically build and deploy your application
+   - The build is configured to ignore TypeScript and ESLint errors during deployment
+   - SSE (Server-Sent Events) API routes are optimized for Vercel Functions
+
+### Local Production Build
+
+To test the production build locally:
+```bash
+npm run build
+npm start
+```
 
 ## Troubleshooting
 
