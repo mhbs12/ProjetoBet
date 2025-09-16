@@ -70,13 +70,15 @@ export default function GamePage() {
   }, [wsRoomState, roomId, currentAccount, finishingGame])
 
   useEffect(() => {
-    if (!currentAccount) {
+    if (!currentAccount?.address) {
+      console.log("[v0] No wallet address available, redirecting to home")
       router.push("/")
       return
     }
 
+    console.log("[v0] Wallet address available, loading room:", currentAccount.address)
     loadRoom()
-  }, [roomId, currentAccount])
+  }, [roomId, currentAccount?.address])
 
   const loadRoom = async () => {
     setLoading(true)
