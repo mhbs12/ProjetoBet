@@ -54,8 +54,8 @@ export class SuiGameContract {
     }
 
     // Validate inputs
-    if (!walletAddress) {
-      throw new Error("Wallet address is required")
+    if (!walletAddress || typeof walletAddress !== 'string' || walletAddress.trim() === '') {
+      throw new Error("Valid wallet address is required. Please ensure your wallet is connected.")
     }
     
     if (betAmount <= 0) {
@@ -110,6 +110,8 @@ export class SuiGameContract {
       
       if (error.message.includes("Contract not configured")) {
         userFriendlyMessage = "Smart contract not configured. Please contact the administrator."
+      } else if (error.message.includes("Invalid Sui address") || error.message.includes("wallet address")) {
+        userFriendlyMessage = "Invalid wallet connection. Please reconnect your wallet and try again."
       } else if (error.message.includes("Insufficient")) {
         userFriendlyMessage = "Insufficient SUI balance. Please add more SUI to your wallet."
       } else if (error.message.includes("Gas")) {
@@ -232,19 +234,28 @@ export class SuiGameContract {
 
   /**
    * List all available Room objects from the blockchain
+   * Note: This method requires a wallet address to query rooms because Sui requires an owner parameter
    */
-  async listRooms() {
+  async listRooms(walletAddress?: string) {
     if (!this.validateContract()) {
       throw new Error("Contract not configured. Cannot query rooms.")
     }
 
+    if (!walletAddress) {
+      console.warn("[v0] Cannot list rooms without wallet address - wallet connection required")
+      return []
+    }
+
     try {
-      console.log("[v0] Querying all Room objects from blockchain...")
+      console.log("[v0] Querying Room objects from blockchain for address:", walletAddress)
       
-      // Query all objects of the Room type
+      // Query all objects of the Room type owned by the current user
+      // Note: In Sui, we can only query objects owned by a specific address
+      // For a complete room listing, we would need to use a different approach like indexing
       const roomType = `${CONTRACT_PACKAGE_ID}::twoproom::Room`
       
       const response = await this.client.getOwnedObjects({
+        owner: walletAddress,
         filter: {
           StructType: roomType
         },
@@ -254,7 +265,7 @@ export class SuiGameContract {
         },
       })
 
-      console.log(`[v0] Found ${response.data.length} Room objects`)
+      console.log(`[v0] Found ${response.data.length} Room objects owned by user`)
 
       const rooms = response.data
         .filter(obj => obj.data?.content?.dataType === "moveObject")
@@ -275,6 +286,13 @@ export class SuiGameContract {
       return rooms
     } catch (error) {
       console.error("Error listing rooms:", error)
+      
+      // Check if the error is due to invalid address
+      if (error.message && error.message.includes("Invalid Sui address")) {
+        console.error("[v0] Invalid wallet address provided:", walletAddress)
+        throw new Error("Invalid wallet address. Please ensure your wallet is properly connected.")
+      }
+      
       return []
     }
   }

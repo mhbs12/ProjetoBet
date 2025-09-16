@@ -44,15 +44,26 @@ export default function HomePage() {
 
   // Load available rooms from blockchain
   const loadAvailableRooms = async () => {
-    if (!currentAccount) return
+    if (!currentAccount?.address) {
+      console.warn("[v0] Cannot load rooms - wallet not connected or address not available")
+      setAvailableRooms([])
+      return
+    }
     
     setLoadingRooms(true)
     try {
-      const rooms = await simpleRoomManager.listAvailableRooms()
+      const rooms = await simpleRoomManager.listAvailableRooms(currentAccount.address)
       setAvailableRooms(rooms.filter(room => room.gameState === "waiting")) // Only show waiting rooms
       console.log("[v0] Loaded available rooms:", rooms)
     } catch (error) {
       console.error("[v0] Failed to load available rooms:", error)
+      
+      // Show user-friendly error message
+      if (error.message && error.message.includes("Invalid wallet address")) {
+        console.error("[v0] Wallet connection issue detected")
+        // Clear available rooms on wallet error
+        setAvailableRooms([])
+      }
     } finally {
       setLoadingRooms(false)
     }
@@ -75,18 +86,32 @@ export default function HomePage() {
       // Clear the URL parameter
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-    
-    // Load available rooms when component mounts
-    loadAvailableRooms()
-  }, [currentAccount])
+  }, [])
 
-  // Refresh rooms periodically
+  // Load available rooms when wallet is connected and address is available
   useEffect(() => {
-    if (!currentAccount) return
+    if (currentAccount?.address) {
+      console.log("[v0] Wallet connected with address:", currentAccount.address)
+      loadAvailableRooms()
+    } else {
+      console.log("[v0] Wallet not connected, clearing available rooms")
+      setAvailableRooms([])
+      setLoadingRooms(false)
+    }
+  }, [currentAccount?.address])
+
+  // Refresh rooms periodically when wallet is connected
+  useEffect(() => {
+    if (!currentAccount?.address) return
     
-    const interval = setInterval(loadAvailableRooms, 30000) // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      if (currentAccount?.address) {
+        loadAvailableRooms()
+      }
+    }, 30000) // Refresh every 30 seconds
+    
     return () => clearInterval(interval)
-  }, [currentAccount])
+  }, [currentAccount?.address])
 
   const createRoom = async () => {
     if (!newRoomBet || !currentAccount) return

@@ -461,12 +461,18 @@ class SimpleRoomManager {
 
   /**
    * List all available rooms from the blockchain
+   * Requires a wallet address since Sui queries are address-specific
    */
-  async listAvailableRooms(): Promise<SimpleRoom[]> {
+  async listAvailableRooms(walletAddress?: string): Promise<SimpleRoom[]> {
+    if (!walletAddress) {
+      console.warn("[v0] Cannot list rooms without wallet address")
+      return []
+    }
+
     try {
-      console.log("[v0] Fetching available rooms from blockchain...")
+      console.log("[v0] Fetching available rooms from blockchain for address:", walletAddress)
       
-      const blockchainRooms = await suiContract.listRooms()
+      const blockchainRooms = await suiContract.listRooms(walletAddress)
       const availableRooms: SimpleRoom[] = []
       
       for (const roomInfo of blockchainRooms) {
@@ -495,6 +501,12 @@ class SimpleRoomManager {
       
     } catch (error) {
       console.error("[v0] Failed to list available rooms:", error)
+      
+      // Check if it's a wallet address error
+      if (error.message && error.message.includes("Invalid wallet address")) {
+        throw error // Re-throw wallet-specific errors
+      }
+      
       // Return locally cached rooms as fallback
       return Array.from(this.rooms.values())
     }
