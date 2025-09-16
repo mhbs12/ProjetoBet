@@ -31,6 +31,27 @@ export default function GamePage() {
   // WebSocket integration for real-time room sync
   const { connected: wsConnected, roomState: wsRoomState, error: wsError, broadcastRoomUpdate } = useWebSocketRoomSync(roomId)
 
+  // Helper function to convert SimpleRoom to GameState
+  const createGameStateFromRoom = (room: SimpleRoom) => {
+    const moves = room.board.filter(cell => cell !== null).length
+    const currentPlayerSymbol = room.currentPlayer === room.players[0] ? "X" : "O"
+    
+    let winner: "X" | "O" | "draw" | null = null
+    if (room.winner) {
+      winner = room.winner === room.players[0] ? "X" : "O"
+    } else if (room.gameState === "finished" && !room.winner) {
+      winner = "draw"
+    }
+
+    return {
+      board: room.board,
+      currentPlayer: currentPlayerSymbol,
+      gameOver: room.gameState === "finished",
+      winner,
+      moves,
+    }
+  }
+
   // Update room state when WebSocket receives updates
   useEffect(() => {
     if (wsRoomState && wsRoomState.roomId === roomId) {
@@ -299,18 +320,7 @@ export default function GamePage() {
               </Card>
             ) : (
               <GameBoard
-                gameState={{
-                  board: room.board,
-                  currentPlayer: room.currentPlayer === walletAddress ? playerSymbol : playerSymbol === "X" ? "O" : "X",
-                  gameOver: isGameOver,
-                  winner: room.winner
-                    ? room.winner === walletAddress
-                      ? playerSymbol
-                      : playerSymbol === "X"
-                        ? "O"
-                        : "X"
-                    : null,
-                }}
+                gameState={createGameStateFromRoom(room)}
                 onMove={handleMove}
                 playerSymbol={playerSymbol}
               />
