@@ -296,14 +296,20 @@ class SimpleRoomManager {
       }
 
       if (room.players.includes(playerAddress)) {
-        // If player is already in room, just return the room (useful for creators re-entering)
-        console.log("[v0] Player is already in room, returning existing room:", playerAddress)
+        // If player is already in room, ensure proper state synchronization
+        console.log("[v0] Player is already in room, ensuring state sync:", playerAddress)
         
-        // Update room state and notify listeners to ensure sync
+        // Update room state and force synchronization
         this.rooms.set(roomId, room)
         this.saveRoomsToStorage()
+        
+        // Force broadcast to ensure all clients are synchronized
+        await this.broadcastRoomUpdate(roomId, room)
+        
+        // Notify local listeners
         this.notifyListeners(roomId, room)
         
+        console.log("[v0] Player already in room, state synchronized successfully")
         return room
       }
 
@@ -321,16 +327,24 @@ class SimpleRoomManager {
         room.currentPlayer = room.players[0] // First player (creator) starts
         console.log("[v0] Room is full, starting game automatically")
         
-        // Update the room immediately and broadcast the state change
+        // Update the room immediately
         this.rooms.set(roomId, room)
         this.saveRoomsToStorage()
+        
+        // Force broadcast the state change to ensure all clients are synchronized
+        await this.broadcastRoomUpdate(roomId, room)
+        
+        // Notify local listeners
         this.notifyListeners(roomId, room)
         
-        console.log("[v0] Game started! Broadcasting room state to all players")
+        console.log("[v0] Game started! Room state broadcasted to all players")
       } else {
         // Update the room for single player case
         this.rooms.set(roomId, room)
         this.saveRoomsToStorage()
+        
+        // Broadcast state even for single player to ensure sync
+        await this.broadcastRoomUpdate(roomId, room)
         this.notifyListeners(roomId, room)
       }
 
@@ -346,26 +360,50 @@ class SimpleRoomManager {
   /**
    * Enter an existing room (for creators who want to enter their own room)
    * This method handles creators accessing their own rooms without needing blockchain transactions
+   * Enhanced with better state synchronization and validation
    */
-  enterRoom(roomId: string, playerAddress: string): SimpleRoom | null {
-    const room = this.rooms.get(roomId)
-    if (!room) {
-      console.error("[v0] Room not found:", roomId)
-      return null
-    }
-
-    if (!room.players.includes(playerAddress)) {
-      console.error("[v0] Player not part of room:", playerAddress)
-      return null
-    }
-
-    console.log("[v0] Player entering room:", playerAddress)
+  async enterRoom(roomId: string, playerAddress: string): Promise<SimpleRoom | null> {
+    console.log("[v0] Attempting to enter room:", roomId, "for player:", playerAddress)
     
-    // Update room state and notify listeners to ensure real-time updates
+    // First, try to get the room from local storage
+    let room = this.rooms.get(roomId)
+    
+    // If room doesn't exist locally, try to load from blockchain
+    if (!room) {
+      console.log("[v0] Room not found locally, attempting to load from blockchain")
+      room = await this.getOrLoadRoom(roomId)
+      
+      if (!room) {
+        console.error("[v0] Room not found anywhere:", roomId)
+        return null
+      }
+    }
+
+    // Validate that the player is part of the room
+    if (!room.players.includes(playerAddress)) {
+      console.error("[v0] Player not part of room:", playerAddress, "Room players:", room.players)
+      return null
+    }
+
+    console.log("[v0] Player successfully entering room:", playerAddress)
+    console.log("[v0] Room current state:", {
+      roomId: room.roomId,
+      players: room.players,
+      gameState: room.gameState,
+      playersCount: room.players.length
+    })
+    
+    // Ensure room state is properly updated and synchronized
     this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
+    
+    // Force broadcast room state to ensure all clients are synchronized
+    await this.broadcastRoomUpdate(roomId, room)
+    
+    // Notify local listeners
     this.notifyListeners(roomId, room)
     
+    console.log("[v0] Room entry completed successfully, state synchronized")
     return room
   }
 
@@ -525,10 +563,13 @@ class SimpleRoomManager {
 
   /**
    * Broadcast room update via Server-Sent Events API
+   * Made public to allow explicit synchronization calls
    */
-  private async broadcastRoomUpdate(roomId: string, roomData: SimpleRoom): Promise<void> {
+  async broadcastRoomUpdate(roomId: string, roomData: SimpleRoom): Promise<void> {
     try {
-      await fetch('/api/socket', {
+      console.log('[v0] Broadcasting room update via SSE for room:', roomId)
+      
+      const response = await fetch('/api/socket', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -538,10 +579,21 @@ class SimpleRoomManager {
           roomData
         })
       })
-      console.log('[v0] Room update broadcasted via SSE:', roomId)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      console.log('[v0] Room update successfully broadcasted via SSE:', roomId)
     } catch (error) {
       console.warn('[v0] Failed to broadcast room update via SSE:', error)
       // Don't throw error - local updates should still work
+      // But log the error for debugging
+      console.warn('[v0] SSE broadcast error details:', {
+        roomId,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      })
     }
   }
 

@@ -13,6 +13,7 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
   const [connected, setConnected] = useState(false)
   const [roomState, setRoomState] = useState<SimpleRoom | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [connectionReady, setConnectionReady] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const reconnectAttempts = useRef(0)
@@ -30,6 +31,7 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
       eventSourceRef.current.onopen = () => {
         console.log('[SSE] Connected successfully')
         setConnected(true)
+        setConnectionReady(true)
         setError(null)
         reconnectAttempts.current = 0
       }
@@ -67,6 +69,7 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
       eventSourceRef.current.onerror = (event) => {
         console.log('[SSE] Connection error or closed')
         setConnected(false)
+        setConnectionReady(false)
 
         // Attempt to reconnect if not a manual close
         if (reconnectAttempts.current < maxReconnectAttempts) {
@@ -100,6 +103,7 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
     }
 
     setConnected(false)
+    setConnectionReady(false)
     setRoomState(null)
     setError(null)
     reconnectAttempts.current = 0
@@ -108,7 +112,9 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
   const broadcastRoomUpdate = useCallback(async (roomData: SimpleRoom) => {
     if (roomId) {
       try {
-        await fetch('/api/socket', {
+        console.log('[SSE] Broadcasting room update:', roomData)
+        
+        const response = await fetch('/api/socket', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -118,9 +124,15 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
             roomData
           })
         })
-        console.log('[SSE] Broadcasted room update:', roomData)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        console.log('[SSE] Room update broadcasted successfully:', roomData)
       } catch (error) {
         console.error('[SSE] Failed to broadcast room update:', error)
+        setError(`Broadcast failed: ${error.message}`)
       }
     }
   }, [roomId])
@@ -137,6 +149,7 @@ export function useServerSentEventsRoomSync(roomId: string | null) {
 
   return {
     connected,
+    connectionReady,
     roomState,
     error,
     broadcastRoomUpdate,

@@ -6,7 +6,10 @@ const roomSubscriptions = new Map<string, Set<{ writer: any; encoder: TextEncode
 // Broadcast room state change to all subscribers
 export function broadcastRoomStateChange(roomId: string, roomData: any) {
   const connections = roomSubscriptions.get(roomId)
-  if (!connections) return
+  if (!connections) {
+    console.log(`[SSE] No connections found for room: ${roomId}`)
+    return
+  }
 
   const message = JSON.stringify({
     type: 'room_state_changed',
@@ -16,21 +19,29 @@ export function broadcastRoomStateChange(roomId: string, roomData: any) {
   })
 
   let activeCount = 0
-  connections.forEach(async ({ writer, encoder }) => {
+  const connectionsToRemove = new Set()
+  
+  connections.forEach(async (connectionData) => {
     try {
-      writer.enqueue(encoder.encode(`data: ${message}\n\n`))
+      connectionData.writer.enqueue(connectionData.encoder.encode(`data: ${message}\n\n`))
       activeCount++
     } catch (error) {
-      console.log('[SSE] Connection closed, removing from subscribers')
-      connections.delete({ writer, encoder })
+      console.log('[SSE] Connection closed, marking for removal')
+      connectionsToRemove.add(connectionData)
     }
   })
 
-  console.log(`[SSE] Broadcasted room state change to ${activeCount} connections for room: ${roomId}`)
+  // Clean up closed connections
+  connectionsToRemove.forEach(connectionData => {
+    connections.delete(connectionData)
+  })
+
+  console.log(`[SSE] Broadcasted room state change to ${activeCount} active connections for room: ${roomId}`)
   
-  // Clean up if no active connections
-  if (activeCount === 0) {
+  // Clean up room subscriptions if no active connections
+  if (connections.size === 0) {
     roomSubscriptions.delete(roomId)
+    console.log(`[SSE] Removed empty room subscriptions for room: ${roomId}`)
   }
 }
 
