@@ -233,6 +233,52 @@ export class SuiGameContract {
   }
 
   /**
+   * Validate a Sui address format
+   */
+  private isValidSuiAddress(address: string): boolean {
+    if (!address || typeof address !== 'string') {
+      return false
+    }
+    
+    // Basic validation - Sui addresses should be hex strings starting with 0x and 64 characters total
+    const cleanAddress = address.trim()
+    if (!cleanAddress.startsWith('0x')) {
+      return false
+    }
+    
+    // Check if it's a valid hex string of correct length (32 bytes = 64 hex chars + 0x prefix)
+    const hexPart = cleanAddress.slice(2)
+    if (hexPart.length !== 64) {
+      return false
+    }
+    
+    // Check if all characters are valid hex
+    return /^[0-9a-fA-F]+$/.test(hexPart)
+  }
+
+  /**
+   * Normalize a Sui address to ensure consistent format
+   */
+  private normalizeSuiAddress(address: string): string {
+    if (!address) return address
+    
+    const cleanAddress = address.trim().toLowerCase()
+    
+    // If it doesn't start with 0x, add it
+    if (!cleanAddress.startsWith('0x')) {
+      return '0x' + cleanAddress.padStart(64, '0')
+    }
+    
+    // If it's too short, pad with zeros
+    if (cleanAddress.length < 66) {
+      const hexPart = cleanAddress.slice(2)
+      return '0x' + hexPart.padStart(64, '0')
+    }
+    
+    return cleanAddress
+  }
+
+  /**
    * List all available Room objects from the blockchain
    * Note: This method requires a wallet address to query rooms because Sui requires an owner parameter
    */
@@ -246,8 +292,17 @@ export class SuiGameContract {
       return []
     }
 
+    // Validate and normalize the wallet address before proceeding
+    if (!this.isValidSuiAddress(walletAddress)) {
+      console.error("[v0] Invalid wallet address format:", walletAddress)
+      console.warn("[v0] Returning empty room list due to invalid address")
+      return [] // Return empty array instead of throwing error to prevent UI crashes
+    }
+
+    const normalizedAddress = this.normalizeSuiAddress(walletAddress)
+    
     try {
-      console.log("[v0] Querying Room objects from blockchain for address:", walletAddress)
+      console.log("[v0] Querying Room objects from blockchain for address:", normalizedAddress)
       
       // Query all objects of the Room type owned by the current user
       // Note: In Sui, we can only query objects owned by a specific address
@@ -255,7 +310,7 @@ export class SuiGameContract {
       const roomType = `${CONTRACT_PACKAGE_ID}::twoproom::Room`
       
       const response = await this.client.getOwnedObjects({
-        owner: walletAddress,
+        owner: normalizedAddress,
         filter: {
           StructType: roomType
         },
@@ -290,9 +345,13 @@ export class SuiGameContract {
       // Check if the error is due to invalid address
       if (error.message && error.message.includes("Invalid Sui address")) {
         console.error("[v0] Invalid wallet address provided:", walletAddress)
-        throw new Error("Invalid wallet address. Please ensure your wallet is properly connected.")
+        console.error("[v0] Normalized address was:", normalizedAddress)
+        console.warn("[v0] Returning empty room list due to address validation error")
+        return [] // Return empty array instead of throwing error to prevent UI crashes
       }
       
+      // For other errors, also return empty array to maintain stability
+      console.warn("[v0] Returning empty room list due to query error")
       return []
     }
   }
@@ -349,57 +408,170 @@ export class SuiGameContract {
 
   /**
    * Get Room ID from transaction result (for room creation)
+   * Enhanced with multiple extraction strategies and better error handling
    */
   async getRoomFromTransaction(transactionDigest: string) {
+    if (!transactionDigest) {
+      console.error(`[v0] No transaction digest provided`)
+      return null
+    }
+
     try {
       console.log(`[v0] Retrieving room ID from transaction:`, transactionDigest)
       
       const transaction = await this.client.getTransactionBlock({
         digest: transactionDigest,
-        options: { showObjectChanges: true, showEffects: true },
+        options: { 
+          showObjectChanges: true, 
+          showEffects: true,
+          showInput: true,
+          showEvents: true 
+        },
       })
 
-      if (transaction.objectChanges) {
+      console.log(`[v0] Transaction details:`, {
+        digest: transactionDigest,
+        status: transaction.effects?.status,
+        objectChangesCount: transaction.objectChanges?.length || 0,
+        eventsCount: transaction.events?.length || 0
+      })
+
+      if (transaction.objectChanges && transaction.objectChanges.length > 0) {
         console.log(`[v0] Analyzing object changes for room:`, JSON.stringify(transaction.objectChanges, null, 2))
         
-        // Look for created Room objects
+        // Look for created Room objects with multiple strategies
         const roomType = `${CONTRACT_PACKAGE_ID}::twoproom::Room`
+        let roomObject = null
         
         // Strategy 1: Look for objects with exact Room type
-        let roomObject = transaction.objectChanges.find(
+        roomObject = transaction.objectChanges.find(
           (change: any) => change.type === "created" && 
           change.objectType === roomType
         )
         
-        // Strategy 2: Look for objects containing "Room" in the type
+        if (roomObject) {
+          console.log(`[v0] Strategy 1 success - exact Room type match:`, roomObject)
+        }
+        
+        // Strategy 2: Look for objects containing "Room" in the type (case insensitive)
         if (!roomObject) {
           roomObject = transaction.objectChanges.find(
             (change: any) => change.type === "created" && change.objectType && 
-            change.objectType.includes("Room")
+            change.objectType.toLowerCase().includes("room")
           )
+          if (roomObject) {
+            console.log(`[v0] Strategy 2 success - Room in type name:`, roomObject)
+          }
         }
         
-        // Strategy 3: Look for any shared object (Room is shared via transfer::share_object)
+        // Strategy 3: Look for objects from the twoproom module 
         if (!roomObject) {
           roomObject = transaction.objectChanges.find(
-            (change: any) => change.type === "created" && change.objectId && 
-            change.objectType && change.objectType.includes("::twoproom::")
+            (change: any) => change.type === "created" && change.objectType && 
+            change.objectType.includes("::twoproom::")
           )
+          if (roomObject) {
+            console.log(`[v0] Strategy 3 success - twoproom module:`, roomObject)
+          }
+        }
+        
+        // Strategy 4: Look for any created object that might be a Room (fallback)
+        if (!roomObject) {
+          roomObject = transaction.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectId
+          )
+          if (roomObject) {
+            console.log(`[v0] Strategy 4 (fallback) - any created object:`, roomObject)
+          }
+        }
+        
+        // Strategy 5: Look for shared objects (Room objects are often shared)
+        if (!roomObject) {
+          roomObject = transaction.objectChanges.find(
+            (change: any) => (change.type === "created" || change.type === "mutated") && 
+            change.objectId && change.sender
+          )
+          if (roomObject) {
+            console.log(`[v0] Strategy 5 success - shared object:`, roomObject)
+          }
         }
         
         if (roomObject?.objectId) {
-          console.log(`[v0] Room ID found in transaction:`, roomObject.objectId)
-          console.log(`[v0] Room object details:`, roomObject)
-          return roomObject.objectId
+          console.log(`[v0] Room ID extracted successfully:`, roomObject.objectId)
+          console.log(`[v0] Room object full details:`, roomObject)
+          
+          // Validate the extracted object ID
+          if (this.isValidObjectId(roomObject.objectId)) {
+            return roomObject.objectId
+          } else {
+            console.error(`[v0] Extracted object ID is invalid:`, roomObject.objectId)
+          }
+        } else {
+          console.warn(`[v0] No room object found in object changes`)
+        }
+      } else {
+        console.warn(`[v0] No object changes found in transaction`)
+      }
+
+      // Check transaction events as an additional strategy
+      if (transaction.events && transaction.events.length > 0) {
+        console.log(`[v0] Checking transaction events for room creation:`, transaction.events)
+        
+        for (const event of transaction.events) {
+          if (event.type && event.type.includes("Room") && event.parsedJson) {
+            console.log(`[v0] Found room-related event:`, event)
+            // Try to extract room ID from event data
+            const eventData = event.parsedJson as any
+            if (eventData.room_id || eventData.id) {
+              const roomId = eventData.room_id || eventData.id
+              console.log(`[v0] Room ID found in event:`, roomId)
+              if (this.isValidObjectId(roomId)) {
+                return roomId
+              }
+            }
+          }
         }
       }
       
-      console.warn(`[v0] No room object found in transaction:`, transactionDigest)
+      console.error(`[v0] Failed to extract room ID from transaction using all strategies`)
+      console.error(`[v0] Transaction digest:`, transactionDigest)
+      console.error(`[v0] Available object changes:`, transaction.objectChanges?.map(c => ({
+        type: c.type,
+        objectType: (c as any).objectType,
+        objectId: (c as any).objectId
+      })))
+      
       return null
     } catch (error) {
       console.error(`[v0] Error retrieving room from transaction:`, error)
+      console.error(`[v0] Transaction digest:`, transactionDigest)
       return null
     }
+  }
+
+  /**
+   * Validate if a string is a valid Sui object ID
+   */
+  private isValidObjectId(objectId: string): boolean {
+    if (!objectId || typeof objectId !== 'string') {
+      return false
+    }
+    
+    const cleanId = objectId.trim()
+    
+    // Sui object IDs should be hex strings starting with 0x
+    if (!cleanId.startsWith('0x')) {
+      return false
+    }
+    
+    // Check if it's a valid hex string (allow different lengths as object IDs can vary)
+    const hexPart = cleanId.slice(2)
+    if (hexPart.length === 0) {
+      return false
+    }
+    
+    // Check if all characters are valid hex
+    return /^[0-9a-fA-F]+$/.test(hexPart)
   }
 
   async getTreasuryBalance(treasuryId: string) {

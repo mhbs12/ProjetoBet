@@ -66,66 +66,152 @@ class SimpleRoomManager {
       
       console.log("[v0] Room creation transaction successful:", result)
       
-      // Extract room object ID from transaction result
+      // Extract room object ID from transaction result with multiple strategies
       let roomId = null
       
-      if (result.objectChanges) {
-        console.log("[v0] Analyzing transaction object changes:", JSON.stringify(result.objectChanges, null, 2))
+      console.log("[v0] Starting room ID extraction from transaction result")
+      console.log("[v0] Transaction result structure:", {
+        hasDigest: !!result.digest,
+        hasObjectChanges: !!result.objectChanges,
+        objectChangesCount: result.objectChanges?.length || 0,
+        hasEffects: !!result.effects,
+        status: result.effects?.status?.status || "unknown"
+      })
+      
+      // Strategy 1: Extract from immediate transaction result object changes
+      if (result.objectChanges && result.objectChanges.length > 0) {
+        console.log("[v0] Strategy 1: Analyzing immediate transaction object changes")
+        console.log("[v0] Object changes details:", JSON.stringify(result.objectChanges, null, 2))
         
         // Look for the Room object in the transaction result
         let roomObject = null
         
-        // Strategy 1: Look for objects with Room type
-        roomObject = result.objectChanges.find(
-          (change: any) => change.type === "created" && change.objectType && 
-          change.objectType.includes("Room")
-        )
+        // Sub-strategy 1a: Look for objects with Room type (exact match)
+        const packageId = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID
+        if (packageId) {
+          const exactRoomType = `${packageId}::twoproom::Room`
+          roomObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && 
+            change.objectType === exactRoomType
+          )
+          if (roomObject) {
+            console.log("[v0] Strategy 1a success - exact Room type match:", roomObject)
+          }
+        }
         
-        // Strategy 2: Look for objects from the twoproom module 
+        // Sub-strategy 1b: Look for objects with Room in the type name
+        if (!roomObject) {
+          roomObject = result.objectChanges.find(
+            (change: any) => change.type === "created" && change.objectType && 
+            change.objectType.toLowerCase().includes("room")
+          )
+          if (roomObject) {
+            console.log("[v0] Strategy 1b success - Room in type name:", roomObject)
+          }
+        }
+        
+        // Sub-strategy 1c: Look for objects from the twoproom module 
         if (!roomObject) {
           roomObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectType && 
             change.objectType.includes("::twoproom::")
           )
+          if (roomObject) {
+            console.log("[v0] Strategy 1c success - twoproom module:", roomObject)
+          }
         }
         
-        // Strategy 3: Look for any shared object (Room is shared via transfer::share_object)
+        // Sub-strategy 1d: Look for any created object as fallback
         if (!roomObject) {
           roomObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId
           )
+          if (roomObject) {
+            console.log("[v0] Strategy 1d (fallback) - any created object:", roomObject)
+          }
         }
         
         roomId = roomObject?.objectId
         
         if (roomId) {
-          console.log("[v0] Room ID extracted successfully, object details:", roomObject)
+          console.log("[v0] Strategy 1 successful - Room ID extracted:", roomId)
         } else {
-          console.error("[v0] Failed to find Room object in transaction changes")
+          console.warn("[v0] Strategy 1 failed - No Room object found in immediate transaction changes")
         }
       }
 
-      // Additional fallback: try to get room from transaction digest if objectChanges failed
+      // Strategy 2: Use transaction digest with enhanced extraction
       if (!roomId && result.digest) {
-        console.log("[v0] Attempting to extract room ID from transaction digest:", result.digest)
-        roomId = await suiContract.getRoomFromTransaction(result.digest)
+        console.log("[v0] Strategy 2: Using transaction digest for room extraction")
         
-        if (roomId) {
-          console.log("[v0] Room ID extracted from transaction digest:", roomId)
+        try {
+          roomId = await suiContract.getRoomFromTransaction(result.digest)
+          
+          if (roomId) {
+            console.log("[v0] Strategy 2 successful - Room ID extracted from digest:", roomId)
+          } else {
+            console.warn("[v0] Strategy 2 failed - No room ID from transaction digest")
+          }
+        } catch (digestError) {
+          console.error("[v0] Strategy 2 error:", digestError)
         }
       }
 
+      // Strategy 3: Retry transaction lookup with delay (sometimes blockchain needs time)
+      if (!roomId && result.digest) {
+        console.log("[v0] Strategy 3: Retrying transaction lookup after delay")
+        
+        try {
+          await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2 seconds
+          roomId = await suiContract.getRoomFromTransaction(result.digest)
+          
+          if (roomId) {
+            console.log("[v0] Strategy 3 successful - Room ID extracted after retry:", roomId)
+          } else {
+            console.warn("[v0] Strategy 3 failed - Still no room ID after retry")
+          }
+        } catch (retryError) {
+          console.error("[v0] Strategy 3 error:", retryError)
+        }
+      }
+
+      // Final check and error reporting
       if (!roomId) {
         const errorDetails = {
           transactionDigest: result.digest || "unknown",
+          transactionStatus: result.effects?.status?.status || "unknown",
           hasObjectChanges: !!result.objectChanges,
           objectChangesCount: result.objectChanges?.length || 0,
-          objectChanges: result.objectChanges || [],
+          objectChanges: result.objectChanges?.map((change: any) => ({
+            type: change.type,
+            objectType: change.objectType,
+            objectId: change.objectId,
+            sender: change.sender
+          })) || [],
+          hasEffects: !!result.effects,
+          packageId: process.env.NEXT_PUBLIC_SUI_PACKAGE_ID || "not configured"
         }
         
-        console.error("[v0] All room extraction strategies failed. Error details:", JSON.stringify(errorDetails, null, 2))
+        console.error("[v0] All room extraction strategies failed!")
+        console.error("[v0] Detailed error information:", JSON.stringify(errorDetails, null, 2))
         
-        throw new Error(`Failed to extract room ID from transaction. Please try again. Transaction: ${result.digest || 'unknown'}`)
+        // Provide more specific error messages based on what we found
+        let errorMessage = "Failed to extract room ID from transaction."
+        
+        if (!result.digest) {
+          errorMessage += " No transaction digest available."
+        } else if (!result.objectChanges || result.objectChanges.length === 0) {
+          errorMessage += " No object changes found in transaction."
+        } else if (!process.env.NEXT_PUBLIC_SUI_PACKAGE_ID) {
+          errorMessage += " Smart contract package ID not configured."
+        } else {
+          errorMessage += " Room object not found in transaction results."
+        }
+        
+        errorMessage += ` Transaction: ${result.digest || 'unknown'}.`
+        errorMessage += " Please verify your smart contract deployment and try again."
+        
+        throw new Error(errorMessage)
       }
 
       console.log("[v0] Room ID extracted successfully:", roomId)
@@ -462,6 +548,7 @@ class SimpleRoomManager {
   /**
    * List all available rooms from the blockchain
    * Requires a wallet address since Sui queries are address-specific
+   * Enhanced with better error handling for address validation issues
    */
   async listAvailableRooms(walletAddress?: string): Promise<SimpleRoom[]> {
     if (!walletAddress) {
@@ -469,46 +556,79 @@ class SimpleRoomManager {
       return []
     }
 
+    // Validate wallet address format before proceeding
+    if (!walletAddress.trim() || walletAddress.trim().length < 10) {
+      console.warn("[v0] Invalid wallet address format provided:", walletAddress)
+      return []
+    }
+
     try {
       console.log("[v0] Fetching available rooms from blockchain for address:", walletAddress)
       
       const blockchainRooms = await suiContract.listRooms(walletAddress)
+      
+      if (!Array.isArray(blockchainRooms)) {
+        console.warn("[v0] Invalid response from blockchain room listing:", blockchainRooms)
+        return []
+      }
+      
       const availableRooms: SimpleRoom[] = []
       
       for (const roomInfo of blockchainRooms) {
-        // Convert blockchain room info to SimpleRoom format
-        const room: SimpleRoom = {
-          roomId: roomInfo.id!,
-          betAmount: 0.1, // Default bet amount since Room struct doesn't store this
-          creator: roomInfo.player1,
-          players: roomInfo.player2 ? [roomInfo.player1, roomInfo.player2] : [roomInfo.player1],
-          currentPlayer: roomInfo.player1,
-          board: Array(9).fill(null),
-          gameState: roomInfo.isFull ? "playing" : "waiting",
-          createdAt: Date.now(),
+        try {
+          // Validate room info before processing
+          if (!roomInfo || !roomInfo.id || !roomInfo.player1) {
+            console.warn("[v0] Skipping invalid room info:", roomInfo)
+            continue
+          }
+          
+          // Convert blockchain room info to SimpleRoom format
+          const room: SimpleRoom = {
+            roomId: roomInfo.id,
+            betAmount: 0.1, // Default bet amount since Room struct doesn't store this
+            creator: roomInfo.player1,
+            players: roomInfo.player2 ? [roomInfo.player1, roomInfo.player2] : [roomInfo.player1],
+            currentPlayer: roomInfo.player1,
+            board: Array(9).fill(null),
+            gameState: roomInfo.isFull ? "playing" : "waiting",
+            createdAt: Date.now(),
+          }
+          
+          // Cache the room locally
+          this.rooms.set(room.roomId, room)
+          availableRooms.push(room)
+          
+        } catch (roomProcessingError) {
+          console.warn("[v0] Failed to process room info:", roomInfo, "Error:", roomProcessingError)
+          // Continue processing other rooms
         }
-        
-        // Cache the room locally
-        this.rooms.set(room.roomId, room)
-        availableRooms.push(room)
       }
       
       // Save to local storage
       this.saveRoomsToStorage()
       
-      console.log(`[v0] Found ${availableRooms.length} available rooms`)
+      console.log(`[v0] Successfully processed ${availableRooms.length} available rooms`)
       return availableRooms
       
     } catch (error) {
       console.error("[v0] Failed to list available rooms:", error)
       
-      // Check if it's a wallet address error
+      // Check if it's a wallet address error and provide specific handling
       if (error.message && error.message.includes("Invalid wallet address")) {
-        throw error // Re-throw wallet-specific errors
+        console.warn("[v0] Wallet address validation failed, returning empty list")
+        return [] // Return empty array instead of crashing the UI
       }
       
-      // Return locally cached rooms as fallback
-      return Array.from(this.rooms.values())
+      // Check if it's a network/connection error
+      if (error.message && (error.message.includes("network") || error.message.includes("connection"))) {
+        console.warn("[v0] Network error while listing rooms, returning cached rooms")
+        // Return locally cached rooms as fallback
+        return Array.from(this.rooms.values()).filter(room => room.gameState === "waiting")
+      }
+      
+      // For any other errors, return locally cached rooms as fallback
+      console.warn("[v0] Using locally cached rooms as fallback")
+      return Array.from(this.rooms.values()).filter(room => room.gameState === "waiting")
     }
   }
 
