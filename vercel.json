@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
+  "devCommand": "npm run dev", 
   "installCommand": "npm install",
   "functions": {
     "app/api/socket/route.ts": {
@@ -10,6 +10,17 @@
   },
   "regions": ["iad1"],
   "env": {
-    "NEXT_PUBLIC_SUI_NETWORK": "devnet"
+    "NEXT_PUBLIC_SUI_NETWORK": "devnet",
+    "NEXT_PUBLIC_DEFAULT_GAS_BUDGET": "10000000",
+    "NEXT_PUBLIC_SUI_PACKAGE_ID": "",
+    "NEXT_PUBLIC_OG_NFT_PACKAGE_ID": ""
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUI_NETWORK": "devnet",
+      "NEXT_PUBLIC_DEFAULT_GAS_BUDGET": "10000000",
+      "NEXT_PUBLIC_SUI_PACKAGE_ID": "",
+      "NEXT_PUBLIC_OG_NFT_PACKAGE_ID": ""
+    }
   }
 }
