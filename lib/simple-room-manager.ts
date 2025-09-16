@@ -289,13 +289,20 @@ class SimpleRoomManager {
   makeMove(roomId: string, position: number, player: string): SimpleRoom | null {
     const room = this.rooms.get(roomId)
     if (!room || room.gameState !== "playing" || room.currentPlayer !== player) {
+      console.log(`[v0] Invalid move attempt: roomExists=${!!room}, gameState=${room?.gameState}, currentPlayer=${room?.currentPlayer}, attemptingPlayer=${player}`)
       return null
     }
 
-    if (room.board[position] !== null) return null
+    if (room.board[position] !== null) {
+      console.log(`[v0] Invalid move: position ${position} already occupied by ${room.board[position]}`)
+      return null
+    }
+
+    const playerSymbol = room.players[0] === player ? "X" : "O"
+    console.log(`[v0] Making move: Player ${playerSymbol} at position ${position}`)
 
     // Make the move
-    room.board[position] = room.players[0] === player ? "X" : "O"
+    room.board[position] = playerSymbol
     
     // Switch current player
     room.currentPlayer = room.players.find((p) => p !== player) || player
@@ -307,7 +314,12 @@ class SimpleRoomManager {
       if (winner) {
         const winnerAddress = winner === "X" ? room.players[0] : room.players[1]
         room.winner = winnerAddress
+        console.log(`[v0] Game finished! Winner: ${winner} (${winnerAddress})`)
+      } else {
+        console.log(`[v0] Game finished! It's a draw.`)
       }
+    } else {
+      console.log(`[v0] Move completed. Next turn: ${room.currentPlayer === room.players[0] ? 'X' : 'O'} (${room.currentPlayer})`)
     }
 
     this.rooms.set(roomId, room)

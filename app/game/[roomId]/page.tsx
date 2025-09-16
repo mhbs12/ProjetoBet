@@ -31,6 +31,27 @@ export default function GamePage() {
   // WebSocket integration for real-time room sync
   const { connected: wsConnected, roomState: wsRoomState, error: wsError, broadcastRoomUpdate } = useWebSocketRoomSync(roomId)
 
+  // Helper function to convert SimpleRoom to GameState
+  const createGameStateFromRoom = (room: SimpleRoom) => {
+    const moves = room.board.filter(cell => cell !== null).length
+    const currentPlayerSymbol = room.currentPlayer === room.players[0] ? "X" : "O"
+    
+    let winner: "X" | "O" | "draw" | null = null
+    if (room.winner) {
+      winner = room.winner === room.players[0] ? "X" : "O"
+    } else if (room.gameState === "finished" && !room.winner) {
+      winner = "draw"
+    }
+
+    return {
+      board: room.board,
+      currentPlayer: currentPlayerSymbol,
+      gameOver: room.gameState === "finished",
+      winner,
+      moves,
+    }
+  }
+
   // Update room state when WebSocket receives updates
   useEffect(() => {
     if (wsRoomState && wsRoomState.roomId === roomId) {
@@ -128,10 +149,29 @@ export default function GamePage() {
 
     console.log("[v0] Making move at position:", position)
 
+    // Validate move before attempting
+    if (room.gameState !== "playing") {
+      console.log("[v0] Cannot move: Game is not in playing state")
+      return
+    }
+
+    if (room.currentPlayer !== currentAccount.address) {
+      console.log("[v0] Cannot move: Not your turn")
+      return
+    }
+
+    if (room.board[position] !== null) {
+      console.log("[v0] Cannot move: Position already occupied")
+      return
+    }
+
     const updatedRoom = simpleRoomManager.makeMove(roomId, position, currentAccount.address)
     if (updatedRoom) {
       setRoom(updatedRoom)
+      console.log("[v0] Move successful, room updated")
       // The room manager will automatically broadcast the update via WebSocket
+    } else {
+      console.warn("[v0] Move failed - room manager returned null")
     }
   }
 
@@ -298,22 +338,38 @@ export default function GamePage() {
                 </CardContent>
               </Card>
             ) : (
-              <GameBoard
-                gameState={{
-                  board: room.board,
-                  currentPlayer: room.currentPlayer === walletAddress ? playerSymbol : playerSymbol === "X" ? "O" : "X",
-                  gameOver: isGameOver,
-                  winner: room.winner
-                    ? room.winner === walletAddress
-                      ? playerSymbol
-                      : playerSymbol === "X"
-                        ? "O"
-                        : "X"
-                    : null,
-                }}
-                onMove={handleMove}
-                playerSymbol={playerSymbol}
-              />
+              <>
+                {/* Turn indicator */}
+                {!isGameOver && (
+                  <Card className="mb-4">
+                    <CardContent className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${
+                          room.currentPlayer === currentAccount?.address 
+                            ? 'bg-green-500 animate-pulse' 
+                            : 'bg-gray-400'
+                        }`} />
+                        <span className={`font-semibold ${
+                          room.currentPlayer === currentAccount?.address 
+                            ? 'text-green-600' 
+                            : 'text-gray-600'
+                        }`}>
+                          {room.currentPlayer === currentAccount?.address 
+                            ? `Sua vez (${playerSymbol})` 
+                            : `Vez do oponente (${playerSymbol === 'X' ? 'O' : 'X'})`
+                          }
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                <GameBoard
+                  gameState={createGameStateFromRoom(room)}
+                  onMove={handleMove}
+                  playerSymbol={playerSymbol}
+                />
+              </>
             )}
 
             {isGameOver && !isWaitingForPlayer && (
