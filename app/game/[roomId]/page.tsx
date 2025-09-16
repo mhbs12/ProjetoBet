@@ -17,8 +17,8 @@ import Link from "next/link"
 export default function GamePage() {
   const params = useParams()
   const router = useRouter()
-  // The roomId in the URL is actually the treasuryId (room code)
-  const treasuryId = params.roomId as string
+  // The roomId in the URL is the Room object ID from blockchain
+  const roomId = params.roomId as string
   const currentAccount = useCurrentAccount()
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
 
@@ -29,11 +29,11 @@ export default function GamePage() {
   const [copiedToClipboard, setCopiedToClipboard] = useState(false)
 
   // WebSocket integration for real-time room sync
-  const { connected: wsConnected, roomState: wsRoomState, error: wsError, broadcastRoomUpdate } = useWebSocketRoomSync(treasuryId)
+  const { connected: wsConnected, roomState: wsRoomState, error: wsError, broadcastRoomUpdate } = useWebSocketRoomSync(roomId)
 
   // Update room state when WebSocket receives updates
   useEffect(() => {
-    if (wsRoomState && wsRoomState.treasuryId === treasuryId) {
+    if (wsRoomState && wsRoomState.roomId === roomId) {
       console.log("[v0] WebSocket room state update received:", wsRoomState)
       setRoom(wsRoomState)
       
@@ -46,7 +46,7 @@ export default function GamePage() {
         handleGameFinish(wsRoomState)
       }
     }
-  }, [wsRoomState, treasuryId, currentAccount, finishingGame])
+  }, [wsRoomState, roomId, currentAccount, finishingGame])
 
   useEffect(() => {
     if (!currentAccount) {
@@ -55,13 +55,13 @@ export default function GamePage() {
     }
 
     loadRoom()
-  }, [treasuryId, currentAccount])
+  }, [roomId, currentAccount])
 
   const loadRoom = async () => {
     setLoading(true)
     try {
-      // Try to get the room using treasury ID with blockchain fallback
-      const currentRoom = await simpleRoomManager.getOrLoadRoom(treasuryId)
+      // Try to get the room using room ID with blockchain fallback
+      const currentRoom = await simpleRoomManager.getOrLoadRoom(roomId)
       
       if (currentRoom) {
         setRoom(currentRoom)
@@ -76,12 +76,12 @@ export default function GamePage() {
         }
       } else {
         // Room not found locally or on blockchain
-        console.log("[v0] Room not found anywhere for treasury ID:", treasuryId)
+        console.log("[v0] Room not found anywhere for room ID:", roomId)
         setRoom(null)
       }
 
       // Subscribe to room updates
-      const unsubscribe = simpleRoomManager.subscribeToRoom(treasuryId, (updatedRoom) => {
+      const unsubscribe = simpleRoomManager.subscribeToRoom(roomId, (updatedRoom) => {
         console.log("[v0] Room updated:", updatedRoom)
         setRoom(updatedRoom)
 
@@ -100,7 +100,7 @@ export default function GamePage() {
   }
 
   const copyRoomCode = () => {
-    navigator.clipboard.writeText(treasuryId).then(() => {
+    navigator.clipboard.writeText(roomId).then(() => {
       setCopiedToClipboard(true)
       setTimeout(() => setCopiedToClipboard(false), 2000)
     })
@@ -113,7 +113,7 @@ export default function GamePage() {
     try {
       console.log("[v0] Finishing game and distributing prize...")
 
-      await simpleRoomManager.finishGame(treasuryId, gameRoom.winner, signAndExecuteTransaction)
+      await simpleRoomManager.finishGame(roomId, gameRoom.winner, signAndExecuteTransaction)
 
       console.log("[v0] Prize distributed successfully!")
     } catch (error) {
@@ -128,7 +128,7 @@ export default function GamePage() {
 
     console.log("[v0] Making move at position:", position)
 
-    const updatedRoom = simpleRoomManager.makeMove(treasuryId, position, currentAccount.address)
+    const updatedRoom = simpleRoomManager.makeMove(roomId, position, currentAccount.address)
     if (updatedRoom) {
       setRoom(updatedRoom)
       // The room manager will automatically broadcast the update via WebSocket
@@ -143,7 +143,7 @@ export default function GamePage() {
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
             <p>Loading room...</p>
             <p className="text-xs text-muted-foreground mt-2">
-              Room Code: {treasuryId.slice(0, 8)}...{treasuryId.slice(-4)}
+              Room ID: {roomId.slice(0, 8)}...{roomId.slice(-4)}
             </p>
           </CardContent>
         </Card>
@@ -161,7 +161,7 @@ export default function GamePage() {
               This room doesn't exist or you don't have access to it.
             </p>
             <p className="text-sm text-muted-foreground mb-4">
-              Room Code: {treasuryId.slice(0, 8)}...{treasuryId.slice(-4)}
+              Room ID: {roomId.slice(0, 8)}...{roomId.slice(-4)}
             </p>
             <Button onClick={() => router.push("/")}>
               Return to Lobby
@@ -195,7 +195,7 @@ export default function GamePage() {
           <h1 className="text-2xl font-bold">
             Sala de Jogo
             <span className="text-lg font-normal text-muted-foreground ml-2">
-              ({treasuryId.slice(0, 8)}...{treasuryId.slice(-4)})
+              ({roomId.slice(0, 8)}...{roomId.slice(-4)})
             </span>
           </h1>
           
@@ -240,7 +240,7 @@ export default function GamePage() {
                     <Button 
                       onClick={() => {
                         // Navigate back to home to join via the join interface
-                        router.push(`/?join=${treasuryId}`)
+                        router.push(`/?join=${roomId}`)
                       }}
                       className="mr-2"
                     >
@@ -271,7 +271,7 @@ export default function GamePage() {
                         <p className="text-sm font-semibold mb-2">Código da Sala:</p>
                         <div className="flex items-center gap-2">
                           <code className="flex-1 p-2 bg-background rounded border text-sm font-mono break-all">
-                            {treasuryId}
+                            {roomId}
                           </code>
                           <Button
                             variant="outline"
@@ -365,8 +365,8 @@ export default function GamePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Código da Sala (Treasury ID)</p>
-                  <p className="font-mono text-xs break-all bg-muted p-2 rounded">{treasuryId}</p>
+                  <p className="text-sm text-muted-foreground font-semibold">Código da Sala (Room ID)</p>
+                  <p className="font-mono text-xs break-all bg-muted p-2 rounded">{roomId}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Compartilhe este código com outros jogadores para convidá-los
                   </p>
