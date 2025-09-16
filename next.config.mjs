@@ -9,6 +9,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Ensure proper environment variable handling
+  env: {
+    NEXT_PUBLIC_SUI_NETWORK: process.env.NEXT_PUBLIC_SUI_NETWORK || 'devnet',
+    NEXT_PUBLIC_DEFAULT_GAS_BUDGET: process.env.NEXT_PUBLIC_DEFAULT_GAS_BUDGET || '10000000',
+  },
 }
 
 export default nextConfig
