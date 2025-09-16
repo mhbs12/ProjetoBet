@@ -360,51 +360,83 @@ class SimpleRoomManager {
   /**
    * Enter an existing room (for creators who want to enter their own room)
    * This method handles creators accessing their own rooms without needing blockchain transactions
-   * Enhanced with better state synchronization and validation
+   * Enhanced with better state synchronization, validation, and retry logic
    */
-  async enterRoom(roomId: string, playerAddress: string): Promise<SimpleRoom | null> {
+  async enterRoom(roomId: string, playerAddress: string, maxRetries: number = 3): Promise<SimpleRoom | null> {
     console.log("[v0] Attempting to enter room:", roomId, "for player:", playerAddress)
     
-    // First, try to get the room from local storage
-    let room = this.rooms.get(roomId)
-    
-    // If room doesn't exist locally, try to load from blockchain
-    if (!room) {
-      console.log("[v0] Room not found locally, attempting to load from blockchain")
-      room = await this.getOrLoadRoom(roomId)
-      
-      if (!room) {
-        console.error("[v0] Room not found anywhere:", roomId)
-        return null
+    let attempt = 0
+    let lastError: Error | null = null
+
+    while (attempt < maxRetries) {
+      try {
+        attempt++
+        console.log(`[v0] Room entry attempt ${attempt}/${maxRetries}`)
+
+        // First, try to get the room from local storage
+        let room = this.rooms.get(roomId)
+        
+        // If room doesn't exist locally, try to load from blockchain
+        if (!room) {
+          console.log("[v0] Room not found locally, attempting to load from blockchain")
+          room = await this.getOrLoadRoom(roomId)
+          
+          if (!room) {
+            console.error("[v0] Room not found anywhere:", roomId)
+            return null
+          }
+        }
+
+        // Validate that the player is part of the room
+        if (!room.players.includes(playerAddress)) {
+          console.error("[v0] Player not part of room:", playerAddress, "Room players:", room.players)
+          return null
+        }
+
+        console.log("[v0] Player successfully entering room:", playerAddress)
+        console.log("[v0] Room current state:", {
+          roomId: room.roomId,
+          players: room.players,
+          gameState: room.gameState,
+          playersCount: room.players.length,
+          attempt: attempt
+        })
+        
+        // Ensure room state is properly updated and synchronized
+        this.rooms.set(roomId, room)
+        this.saveRoomsToStorage()
+        
+        // Force broadcast room state to ensure all clients are synchronized
+        // Add retry logic for broadcasting
+        try {
+          await this.broadcastRoomUpdate(roomId, room)
+          console.log("[v0] Room state broadcast successful")
+        } catch (broadcastError) {
+          console.warn("[v0] Room state broadcast failed, but continuing:", broadcastError.message)
+          // Don't fail the entire operation if broadcast fails
+        }
+        
+        // Notify local listeners
+        this.notifyListeners(roomId, room)
+        
+        console.log("[v0] Room entry completed successfully, state synchronized")
+        return room
+
+      } catch (error) {
+        lastError = error as Error
+        console.warn(`[v0] Room entry attempt ${attempt} failed:`, error.message)
+        
+        if (attempt < maxRetries) {
+          // Wait before retrying with exponential backoff
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+          console.log(`[v0] Retrying room entry in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
     }
 
-    // Validate that the player is part of the room
-    if (!room.players.includes(playerAddress)) {
-      console.error("[v0] Player not part of room:", playerAddress, "Room players:", room.players)
-      return null
-    }
-
-    console.log("[v0] Player successfully entering room:", playerAddress)
-    console.log("[v0] Room current state:", {
-      roomId: room.roomId,
-      players: room.players,
-      gameState: room.gameState,
-      playersCount: room.players.length
-    })
-    
-    // Ensure room state is properly updated and synchronized
-    this.rooms.set(roomId, room)
-    this.saveRoomsToStorage()
-    
-    // Force broadcast room state to ensure all clients are synchronized
-    await this.broadcastRoomUpdate(roomId, room)
-    
-    // Notify local listeners
-    this.notifyListeners(roomId, room)
-    
-    console.log("[v0] Room entry completed successfully, state synchronized")
-    return room
+    console.error("[v0] All room entry attempts failed. Last error:", lastError?.message)
+    return null
   }
 
   /**
@@ -564,37 +596,58 @@ class SimpleRoomManager {
   /**
    * Broadcast room update via Server-Sent Events API
    * Made public to allow explicit synchronization calls
+   * Enhanced with retry logic and better error handling
    */
-  async broadcastRoomUpdate(roomId: string, roomData: SimpleRoom): Promise<void> {
-    try {
-      console.log('[v0] Broadcasting room update via SSE for room:', roomId)
-      
-      const response = await fetch('/api/socket', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomId,
-          roomData
+  async broadcastRoomUpdate(roomId: string, roomData: SimpleRoom, maxRetries: number = 2): Promise<void> {
+    let attempt = 0
+    let lastError: Error | null = null
+
+    while (attempt < maxRetries) {
+      try {
+        attempt++
+        console.log(`[v0] Broadcasting room update via SSE for room: ${roomId} (attempt ${attempt}/${maxRetries})`)
+        
+        const response = await fetch('/api/socket', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            roomId,
+            roomData
+          }),
+          // Add timeout to prevent hanging requests
+          signal: AbortSignal.timeout(5000) // 5 second timeout
         })
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        console.log('[v0] Room update successfully broadcasted via SSE:', roomId)
+        return // Success, exit the retry loop
+
+      } catch (error) {
+        lastError = error as Error
+        console.warn(`[v0] SSE broadcast attempt ${attempt} failed:`, error.message)
+        
+        if (attempt < maxRetries) {
+          // Wait before retrying
+          const delay = 1000 * attempt // Linear backoff: 1s, 2s
+          console.log(`[v0] Retrying SSE broadcast in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
       }
-      
-      console.log('[v0] Room update successfully broadcasted via SSE:', roomId)
-    } catch (error) {
-      console.warn('[v0] Failed to broadcast room update via SSE:', error)
-      // Don't throw error - local updates should still work
-      // But log the error for debugging
-      console.warn('[v0] SSE broadcast error details:', {
-        roomId,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      })
     }
+
+    // All retries failed, log error but don't throw
+    console.warn('[v0] Failed to broadcast room update via SSE after all retries:', lastError?.message)
+    console.warn('[v0] SSE broadcast error details:', {
+      roomId,
+      error: lastError?.message,
+      timestamp: new Date().toISOString(),
+      totalAttempts: attempt
+    })
   }
 
   /**

@@ -1,7 +1,13 @@
 import { NextRequest } from 'next/server'
 
-// Store room subscriptions
-const roomSubscriptions = new Map<string, Set<{ writer: any; encoder: TextEncoder }>>()
+// Store room subscriptions with enhanced tracking
+const roomSubscriptions = new Map<string, Set<{ 
+  writer: any; 
+  encoder: TextEncoder;
+  connectionId: string;
+  connectedAt: number;
+  lastActivity: number;
+}>>()
 
 // Broadcast room state change to all subscribers
 export function broadcastRoomStateChange(roomId: string, roomData: any) {
@@ -23,10 +29,14 @@ export function broadcastRoomStateChange(roomId: string, roomData: any) {
   
   connections.forEach(async (connectionData) => {
     try {
+      // Update last activity time for connection tracking
+      connectionData.lastActivity = Date.now()
+      
       connectionData.writer.enqueue(connectionData.encoder.encode(`data: ${message}\n\n`))
       activeCount++
+      console.log(`[SSE] Sent room update to connection: ${connectionData.connectionId}`)
     } catch (error) {
-      console.log('[SSE] Connection closed, marking for removal')
+      console.log(`[SSE] Connection closed, marking for removal: ${connectionData.connectionId}`)
       connectionsToRemove.add(connectionData)
     }
   })
@@ -57,35 +67,62 @@ export async function GET(request: NextRequest) {
   }
 
   const encoder = new TextEncoder()
+  const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  
+  console.log(`[SSE] New connection attempt for room: ${roomId}, connectionId: ${connectionId}`)
 
   // Create SSE stream
   const stream = new ReadableStream({
     start(controller) {
       console.log(`[SSE] Client subscribed to room: ${roomId}`)
 
-      // Add connection to room subscriptions
+      // Add connection to room subscriptions with enhanced tracking
       if (!roomSubscriptions.has(roomId)) {
         roomSubscriptions.set(roomId, new Set())
       }
 
-      const connectionData = { writer: controller, encoder }
+      const connectionData = { 
+        writer: controller, 
+        encoder,
+        connectionId,
+        connectedAt: Date.now(),
+        lastActivity: Date.now()
+      }
       roomSubscriptions.get(roomId)!.add(connectionData)
 
-      // Send initial connection message
+      // Send initial connection message with connection validation
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({
         type: 'connected',
         roomId,
-        message: 'SSE connected to room'
+        connectionId,
+        message: 'SSE connected to room',
+        timestamp: Date.now()
       })}\n\n`))
+
+      // Send current room status if available (for faster initial sync)
+      setTimeout(() => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'connection_ready',
+            roomId,
+            connectionId,
+            message: 'Connection established and ready for room updates',
+            timestamp: Date.now()
+          })}\n\n`))
+        } catch (error) {
+          console.log(`[SSE] Connection closed before ready signal: ${connectionId}`)
+        }
+      }, 100)
 
       // Clean up on close
       request.signal.addEventListener('abort', () => {
-        console.log(`[SSE] Client disconnected from room: ${roomId}`)
+        console.log(`[SSE] Client disconnected from room: ${roomId}, connectionId: ${connectionId}`)
         const connections = roomSubscriptions.get(roomId)
         if (connections) {
           connections.delete(connectionData)
           if (connections.size === 0) {
             roomSubscriptions.delete(roomId)
+            console.log(`[SSE] Removed empty room subscriptions for room: ${roomId}`)
           }
         }
       })

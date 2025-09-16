@@ -33,7 +33,8 @@ export default function GamePage() {
     connected: wsConnected, 
     connectionReady: wsConnectionReady,
     roomState: wsRoomState, 
-    error: wsError, 
+    error: wsError,
+    connectionId: wsConnectionId,
     broadcastRoomUpdate 
   } = useWebSocketRoomSync(roomId)
 
@@ -89,7 +90,7 @@ export default function GamePage() {
   const loadRoom = async () => {
     setLoading(true)
     try {
-      console.log("[v0] Loading room with WebSocket state - connected:", wsConnected, "ready:", wsConnectionReady)
+      console.log("[v0] Loading room with WebSocket state - connected:", wsConnected, "ready:", wsConnectionReady, "connectionId:", wsConnectionId)
       
       // Try to get the room using room ID with blockchain fallback
       const currentRoom = await simpleRoomManager.getOrLoadRoom(roomId)
@@ -108,11 +109,32 @@ export default function GamePage() {
           // Player is already in room, ensure state synchronization via WebSocket
           console.log("[v0] Player is in room, ensuring WebSocket state sync")
           
+          // Wait for WebSocket connection to be ready before attempting room entry
+          const maxWaitTime = 10000 // 10 seconds
+          const waitStartTime = Date.now()
+          
+          const waitForConnection = async (): Promise<boolean> => {
+            while (Date.now() - waitStartTime < maxWaitTime) {
+              if (wsConnectionReady) {
+                console.log("[v0] WebSocket connection ready, proceeding with room entry")
+                return true
+              }
+              console.log("[v0] Waiting for WebSocket connection to be ready...")
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
+            console.warn("[v0] WebSocket connection timeout, proceeding anyway")
+            return false
+          }
+
+          const connectionReady = await waitForConnection()
+          
           // Use enterRoom to ensure proper state synchronization
           const syncedRoom = await simpleRoomManager.enterRoom(roomId, currentAccount.address)
           if (syncedRoom) {
             setRoom(syncedRoom)
-            console.log("[v0] Room state synchronized successfully")
+            console.log("[v0] Room state synchronized successfully", connectionReady ? "(with WebSocket)" : "(without WebSocket)")
+          } else {
+            console.warn("[v0] Failed to synchronize room state")
           }
         }
       } else {
@@ -265,6 +287,9 @@ export default function GamePage() {
               <>
                 <Wifi className="w-4 h-4 text-green-500" />
                 <span className="text-green-600">Conectado em tempo real</span>
+                {wsConnectionId && (
+                  <span className="text-xs text-muted-foreground">({wsConnectionId.slice(-6)})</span>
+                )}
               </>
             ) : wsConnected && !wsConnectionReady ? (
               <>
