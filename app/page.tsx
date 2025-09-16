@@ -71,8 +71,8 @@ export default function HomePage() {
 
   // Check if contract is properly configured and handle URL parameters
   useEffect(() => {
-    const packageId = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID
-    setIsContractConfigured(!!packageId)
+    const packageId = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID || ""
+    setIsContractConfigured(packageId.length > 0)
     
     if (!packageId) {
       console.warn("[v0] Contract package ID not configured")
