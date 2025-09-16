@@ -19,30 +19,48 @@ export default function HomePage() {
   const currentAccount = useCurrentAccount()
   const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction()
   const [newRoomBet, setNewRoomBet] = useState("0.1")
-  const [joinTreasuryId, setJoinTreasuryId] = useState("")
+  const [joinRoomId, setJoinRoomId] = useState("")
   const [joinBetAmount, setJoinBetAmount] = useState("0.1")
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [joiningRoom, setJoiningRoom] = useState(false)
-  const [createdTreasuryId, setCreatedTreasuryId] = useState<string | null>(null)
-  const [showTreasuryDialog, setShowTreasuryDialog] = useState(false)
+  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null)
+  const [showRoomDialog, setShowRoomDialog] = useState(false)
   const [isContractConfigured, setIsContractConfigured] = useState(true)
-  const [copiedTreasuryId, setCopiedTreasuryId] = useState(false)
+  const [copiedRoomId, setCopiedRoomId] = useState(false)
+  const [availableRooms, setAvailableRooms] = useState<any[]>([])
+  const [loadingRooms, setLoadingRooms] = useState(false)
 
-  const copyTreasuryId = (treasuryId: string) => {
-    navigator.clipboard.writeText(treasuryId).then(() => {
-      setCopiedTreasuryId(true)
-      setTimeout(() => setCopiedTreasuryId(false), 2000)
+  const copyRoomId = (roomId: string) => {
+    navigator.clipboard.writeText(roomId).then(() => {
+      setCopiedRoomId(true)
+      setTimeout(() => setCopiedRoomId(false), 2000)
     })
   }
 
-  const enterMyRoom = (treasuryId: string) => {
-    setShowTreasuryDialog(false)
-    router.push(`/game/${treasuryId}`)
+  const enterMyRoom = (roomId: string) => {
+    setShowRoomDialog(false)
+    router.push(`/game/${roomId}`)
+  }
+
+  // Load available rooms from blockchain
+  const loadAvailableRooms = async () => {
+    if (!currentAccount) return
+    
+    setLoadingRooms(true)
+    try {
+      const rooms = await simpleRoomManager.listAvailableRooms()
+      setAvailableRooms(rooms.filter(room => room.gameState === "waiting")) // Only show waiting rooms
+      console.log("[v0] Loaded available rooms:", rooms)
+    } catch (error) {
+      console.error("[v0] Failed to load available rooms:", error)
+    } finally {
+      setLoadingRooms(false)
+    }
   }
 
   // Check if contract is properly configured and handle URL parameters
   useEffect(() => {
-    const packageId = process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID
+    const packageId = process.env.NEXT_PUBLIC_SUI_PACKAGE_ID
     setIsContractConfigured(!!packageId)
     
     if (!packageId) {
@@ -53,35 +71,49 @@ export default function HomePage() {
     const urlParams = new URLSearchParams(window.location.search)
     const joinParam = urlParams.get('join')
     if (joinParam) {
-      setJoinTreasuryId(joinParam)
+      setJoinRoomId(joinParam)
       // Clear the URL parameter
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [])
+    
+    // Load available rooms when component mounts
+    loadAvailableRooms()
+  }, [currentAccount])
+
+  // Refresh rooms periodically
+  useEffect(() => {
+    if (!currentAccount) return
+    
+    const interval = setInterval(loadAvailableRooms, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [currentAccount])
 
   const createRoom = async () => {
     if (!newRoomBet || !currentAccount) return
 
     setCreatingRoom(true)
     try {
-      console.log("[v0] Creating room with simplified treasury ID system...")
+      console.log("[v0] Creating room with new Room system...")
 
       const betAmount = Number.parseFloat(newRoomBet)
       
-      // Create room and get treasury ID as room code
-      const treasuryId = await simpleRoomManager.createRoom(
+      // Create room and get room ID
+      const roomId = await simpleRoomManager.createRoom(
         currentAccount.address,
         betAmount,
         signAndExecuteTransaction,
       )
       
-      // Show treasury ID dialog for sharing
-      setCreatedTreasuryId(treasuryId)
-      setShowTreasuryDialog(true)
+      // Show room ID dialog for sharing
+      setCreatedRoomId(roomId)
+      setShowRoomDialog(true)
       
       setNewRoomBet("0.1")
 
-      console.log("[v0] Room created successfully with Treasury ID (room code):", treasuryId)
+      console.log("[v0] Room created successfully with Room ID:", roomId)
+      
+      // Refresh available rooms list
+      loadAvailableRooms()
     } catch (error) {
       console.error("[v0] Failed to create room:", error)
       alert(`Failed to create room: ${error.message}`)
@@ -91,7 +123,7 @@ export default function HomePage() {
   }
 
   const joinRoom = async () => {
-    if (!joinTreasuryId.trim() || !currentAccount || !joinBetAmount) return
+    if (!joinRoomId.trim() || !currentAccount || !joinBetAmount) return
 
     const betAmount = Number.parseFloat(joinBetAmount)
     if (betAmount <= 0) {
@@ -101,32 +133,32 @@ export default function HomePage() {
 
     setJoiningRoom(true)
     try {
-      console.log("[v0] Joining room with treasury ID (room code):", joinTreasuryId)
+      console.log("[v0] Joining room with room ID:", joinRoomId)
 
       const room = await simpleRoomManager.joinRoom(
-        joinTreasuryId.trim(),
+        joinRoomId.trim(),
         currentAccount.address,
         betAmount,
         signAndExecuteTransaction
       )
       
-      setJoinTreasuryId("")
+      setJoinRoomId("")
       setJoinBetAmount("0.1")
 
       console.log("[v0] Joined room successfully, redirecting...")
-      router.push(`/game/${joinTreasuryId.trim()}`)
+      router.push(`/game/${joinRoomId.trim()}`)
     } catch (error) {
       console.error("[v0] Failed to join room:", error)
       
       let userMessage = "Failed to join room"
       if (error.message.includes("not found")) {
-        userMessage = "Room code not found. Please check the Treasury ID and try again."
+        userMessage = "Room not found. Please check the Room ID and try again."
       } else if (error.message.includes("full")) {
         userMessage = "This room is already full. Please try joining a different room."
       } else if (error.message.includes("already in room")) {
         userMessage = "You are already in this room."
-      } else if (error.message.includes("Treasury")) {
-        userMessage = "Unable to access room. The room code may be invalid or expired."
+      } else if (error.message.includes("ERoomFull")) {
+        userMessage = "This room is already full. Please try joining a different room."
       } else if (error.message.includes("Transaction failed")) {
         userMessage = "Transaction failed. Please check your wallet connection and try again."
       } else {
@@ -134,6 +166,36 @@ export default function HomePage() {
       }
       
       alert(userMessage)
+    } finally {
+      setJoiningRoom(false)
+    }
+  }
+
+  const joinAvailableRoom = async (roomId: string) => {
+    const betAmount = Number.parseFloat(joinBetAmount)
+    if (betAmount <= 0) {
+      alert("Please set a valid bet amount first")
+      return
+    }
+
+    setJoiningRoom(true)
+    try {
+      console.log("[v0] Joining available room:", roomId)
+
+      await simpleRoomManager.joinRoom(
+        roomId,
+        currentAccount!.address,
+        betAmount,
+        signAndExecuteTransaction
+      )
+
+      console.log("[v0] Joined available room successfully, redirecting...")
+      router.push(`/game/${roomId}`)
+    } catch (error) {
+      console.error("[v0] Failed to join available room:", error)
+      alert(`Failed to join room: ${error.message}`)
+      // Refresh rooms list in case the room was filled by someone else
+      loadAvailableRooms()
     } finally {
       setJoiningRoom(false)
     }
@@ -189,7 +251,7 @@ export default function HomePage() {
               <AlertTitle className="text-amber-800">Smart Contract Not Configured</AlertTitle>
               <AlertDescription className="text-amber-700">
                 To use the betting functionality, you need to deploy a smart contract and set the{" "}
-                <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_CONTRACT_PACKAGE_ID</code> environment variable.
+                <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_SUI_PACKAGE_ID</code> environment variable.
               </AlertDescription>
             </Alert>
           )}
@@ -251,16 +313,16 @@ export default function HomePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="treasuryId">Código da Sala (Treasury ID)</Label>
+                <Label htmlFor="roomId">Código da Sala (Room ID)</Label>
                 <Input
-                  id="treasuryId"
-                  value={joinTreasuryId}
-                  onChange={(e) => setJoinTreasuryId(e.target.value)}
-                  placeholder="Cole o código da sala aqui"
+                  id="roomId"
+                  value={joinRoomId}
+                  onChange={(e) => setJoinRoomId(e.target.value)}
+                  placeholder="Cole o ID da sala aqui"
                   disabled={joiningRoom}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Digite o código da sala que você recebeu do criador
+                  Digite o ID da sala que você recebeu do criador
                 </p>
               </div>
               <div>
@@ -276,7 +338,7 @@ export default function HomePage() {
                   disabled={joiningRoom}
                 />
               </div>
-              <Button onClick={joinRoom} className="w-full" disabled={!joinTreasuryId.trim() || !joinBetAmount || joiningRoom || !isContractConfigured}>
+              <Button onClick={joinRoom} className="w-full" disabled={!joinRoomId.trim() || !joinBetAmount || joiningRoom || !isContractConfigured}>
                 {joiningRoom ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -299,6 +361,64 @@ export default function HomePage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Available Rooms Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Salas Disponíveis
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={loadAvailableRooms}
+                disabled={loadingRooms}
+              >
+                {loadingRooms ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Atualizar"
+                )}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingRooms ? (
+              <div className="text-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+                <p className="text-muted-foreground">Carregando salas...</p>
+              </div>
+            ) : availableRooms.length > 0 ? (
+              <div className="space-y-4">
+                {availableRooms.map((room) => (
+                  <div key={room.roomId} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <p className="font-semibold">Sala criada por: {room.creator.slice(0, 6)}...{room.creator.slice(-4)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Jogadores: {room.players.length}/2 • Estado: {room.gameState === "waiting" ? "Aguardando" : "Jogando"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">ID: {room.roomId.slice(0, 8)}...</p>
+                    </div>
+                    <Button 
+                      onClick={() => joinAvailableRoom(room.roomId)}
+                      disabled={joiningRoom || room.gameState !== "waiting"}
+                      size="sm"
+                    >
+                      {room.gameState === "waiting" ? "Entrar" : "Cheia"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Nenhuma sala disponível no momento.</p>
+                <p className="text-sm mt-2">Crie uma nova sala ou tente atualizar.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card className="text-center">
@@ -333,8 +453,8 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Treasury ID Success Dialog */}
-      <Dialog open={showTreasuryDialog} onOpenChange={setShowTreasuryDialog}>
+      {/* Room ID Success Dialog */}
+      <Dialog open={showRoomDialog} onOpenChange={setShowRoomDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -347,18 +467,18 @@ export default function HomePage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-muted p-4 rounded-lg">
-              <Label className="text-sm font-semibold">Código da Sala (Treasury ID)</Label>
+              <Label className="text-sm font-semibold">Código da Sala (Room ID)</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 p-2 bg-background rounded border text-sm font-mono break-all">
-                  {createdTreasuryId}
+                  {createdRoomId}
                 </code>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => createdTreasuryId && copyTreasuryId(createdTreasuryId)}
+                  onClick={() => createdRoomId && copyRoomId(createdRoomId)}
                 >
                   <Copy className="w-4 h-4" />
-                  {copiedTreasuryId ? "Copied!" : "Copy"}
+                  {copiedRoomId ? "Copied!" : "Copy"}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
@@ -370,8 +490,8 @@ export default function HomePage() {
                 variant="outline" 
                 className="flex-1"
                 onClick={() => {
-                  setShowTreasuryDialog(false)
-                  setCreatedTreasuryId(null)
+                  setShowRoomDialog(false)
+                  setCreatedRoomId(null)
                   // Stay on the lobby page - user can create or join other rooms
                 }}
               >
@@ -379,7 +499,7 @@ export default function HomePage() {
               </Button>
               <Button 
                 className="flex-1"
-                onClick={() => createdTreasuryId && enterMyRoom(createdTreasuryId)}
+                onClick={() => createdRoomId && enterMyRoom(createdRoomId)}
               >
                 Entrar na Sala
               </Button>

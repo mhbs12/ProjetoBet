@@ -1,7 +1,7 @@
 import { suiContract } from "./sui-integration"
 
 export interface SimpleRoom {
-  treasuryId: string // This is the room code - the primary identifier
+  roomId: string // This is the room ID - the Room object ID from blockchain
   betAmount: number
   creator: string
   players: string[] // Array of player addresses, max 2
@@ -55,10 +55,10 @@ class SimpleRoomManager {
 
   /**
    * Create a new room by calling the blockchain contract
-   * Returns the treasuryId which serves as the room code
+   * Returns the roomId which serves as the room identifier
    */
   async createRoom(creatorAddress: string, betAmount: number, signAndExecute: any): Promise<string> {
-    console.log("[v0] Creating new room with treasury ID as room code")
+    console.log("[v0] Creating new room with Room system")
 
     try {
       // Call the blockchain contract to create the room
@@ -66,93 +66,73 @@ class SimpleRoomManager {
       
       console.log("[v0] Room creation transaction successful:", result)
       
-      // Extract treasury object ID from transaction result
-      let treasuryId = null
+      // Extract room object ID from transaction result
+      let roomId = null
       
       if (result.objectChanges) {
         console.log("[v0] Analyzing transaction object changes:", JSON.stringify(result.objectChanges, null, 2))
         
-        // Look for the treasury object in the transaction result with multiple strategies
-        let treasuryObject = null
+        // Look for the Room object in the transaction result
+        let roomObject = null
         
-        // Strategy 1: Look for objects with treasury-related names (case insensitive)
-        treasuryObject = result.objectChanges.find(
+        // Strategy 1: Look for objects with Room type
+        roomObject = result.objectChanges.find(
           (change: any) => change.type === "created" && change.objectType && 
-          (change.objectType.toLowerCase().includes("treasury") || 
-           change.objectType.toLowerCase().includes("::treasury") ||
-           change.objectType.includes("Treasury"))
+          change.objectType.includes("Room")
         )
         
-        // Strategy 2: Look for objects from the bet module 
-        if (!treasuryObject) {
-          treasuryObject = result.objectChanges.find(
+        // Strategy 2: Look for objects from the game module 
+        if (!roomObject) {
+          roomObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectType && 
-            change.objectType.includes("::bet::")
+            change.objectType.includes("::game::")
           )
         }
         
-        // Strategy 3: Look for any shared object (treasury is shared via transfer::share_object)
-        if (!treasuryObject) {
-          treasuryObject = result.objectChanges.find(
-            (change: any) => change.type === "created" && change.objectId && 
-            (change.sender === undefined || change.sender === null) // Shared objects often don't have sender
-          )
-        }
-        
-        // Strategy 4: Look for any created object as ultimate fallback
-        if (!treasuryObject) {
-          treasuryObject = result.objectChanges.find(
+        // Strategy 3: Look for any shared object (Room is shared via transfer::share_object)
+        if (!roomObject) {
+          roomObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId
           )
         }
         
-        treasuryId = treasuryObject?.objectId
+        roomId = roomObject?.objectId
         
-        if (treasuryId) {
-          console.log("[v0] Treasury ID extracted using strategy, object details:", treasuryObject)
+        if (roomId) {
+          console.log("[v0] Room ID extracted successfully, object details:", roomObject)
         } else {
-          console.error("[v0] Failed to find treasury object in transaction changes")
+          console.error("[v0] Failed to find Room object in transaction changes")
         }
       }
 
-      // Additional fallback: try to get treasury from transaction digest if objectChanges failed
-      if (!treasuryId && result.digest) {
-        console.log("[v0] Attempting to extract treasury ID from transaction digest:", result.digest)
-        treasuryId = await suiContract.getTreasuryFromTransaction(result.digest)
+      // Additional fallback: try to get room from transaction digest if objectChanges failed
+      if (!roomId && result.digest) {
+        console.log("[v0] Attempting to extract room ID from transaction digest:", result.digest)
+        roomId = await suiContract.getRoomFromTransaction(result.digest)
         
-        if (treasuryId) {
-          console.log("[v0] Treasury ID extracted from transaction digest:", treasuryId)
+        if (roomId) {
+          console.log("[v0] Room ID extracted from transaction digest:", roomId)
         }
       }
 
-      if (!treasuryId) {
-        // Create a detailed error message for debugging
+      if (!roomId) {
         const errorDetails = {
           transactionDigest: result.digest || "unknown",
           hasObjectChanges: !!result.objectChanges,
           objectChangesCount: result.objectChanges?.length || 0,
           objectChanges: result.objectChanges || [],
-          extractionAttempted: true,
-          fallbackAttempted: !!result.digest
         }
         
-        console.error("[v0] All treasury extraction strategies failed. Error details:", JSON.stringify(errorDetails, null, 2))
-        console.error("[v0] Full transaction result:", JSON.stringify(result, null, 2))
+        console.error("[v0] All room extraction strategies failed. Error details:", JSON.stringify(errorDetails, null, 2))
         
-        throw new Error(`Failed to extract treasury ID from transaction. Please try again or contact support if the issue persists. Transaction: ${result.digest || 'unknown'}`)
+        throw new Error(`Failed to extract room ID from transaction. Please try again. Transaction: ${result.digest || 'unknown'}`)
       }
 
-      console.log("[v0] Treasury ID extracted successfully:", treasuryId)
+      console.log("[v0] Room ID extracted successfully:", roomId)
 
-      // Validate the treasury ID format (should be a valid Sui object ID)
-      if (treasuryId && (treasuryId.length < 10 || !treasuryId.startsWith('0x'))) {
-        console.warn("[v0] Treasury ID may be invalid format:", treasuryId)
-        // Don't throw error here, let the subsequent treasury validation catch it
-      }
-
-      // Create the room object using treasury ID as the key
+      // Create the room object using room ID as the key
       const room: SimpleRoom = {
-        treasuryId,
+        roomId,
         betAmount,
         creator: creatorAddress,
         players: [creatorAddress],
@@ -162,28 +142,27 @@ class SimpleRoomManager {
         createdAt: Date.now(),
       }
 
-      // Store the room using treasury ID as the key
-      this.rooms.set(treasuryId, room)
+      // Store the room using room ID as the key
+      this.rooms.set(roomId, room)
       this.saveRoomsToStorage()
-      this.notifyListeners(treasuryId, room)
+      this.notifyListeners(roomId, room)
 
-      console.log("[v0] Room created successfully with treasury ID:", treasuryId)
+      console.log("[v0] Room created successfully with room ID:", roomId)
       
-      // Optional: Verify treasury is accessible (don't fail room creation if this fails)
+      // Optional: Verify room is accessible (don't fail room creation if this fails)
       try {
-        console.log("[v0] Verifying treasury accessibility...")
-        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId, 1) // Only 1 retry for verification
-        if (treasuryInfo) {
-          console.log("[v0] Treasury verification successful:", treasuryInfo)
+        console.log("[v0] Verifying room accessibility...")
+        const roomInfo = await suiContract.getRoomInfo(roomId)
+        if (roomInfo) {
+          console.log("[v0] Room verification successful:", roomInfo)
         } else {
-          console.warn("[v0] Treasury verification failed - treasury may need time to propagate")
+          console.warn("[v0] Room verification failed - room may need time to propagate")
         }
       } catch (verificationError) {
-        console.warn("[v0] Treasury verification failed (non-critical):", verificationError.message)
-        // Don't throw error here - room creation was successful, this is just verification
+        console.warn("[v0] Room verification failed (non-critical):", verificationError.message)
       }
       
-      return treasuryId
+      return roomId
 
     } catch (error) {
       console.error("[v0] Failed to create room:", error)
@@ -192,37 +171,37 @@ class SimpleRoomManager {
   }
 
   /**
-   * Join a room using treasury ID as the room code
+   * Join a room using room ID
    */
-  async joinRoom(treasuryId: string, playerAddress: string, betAmount: number, signAndExecute: any): Promise<SimpleRoom> {
-    console.log("[v0] Joining room with treasury ID:", treasuryId)
+  async joinRoom(roomId: string, playerAddress: string, betAmount: number, signAndExecute: any): Promise<SimpleRoom> {
+    console.log("[v0] Joining room with room ID:", roomId)
 
     try {
       // First, try to get the room from local storage
-      let room = this.rooms.get(treasuryId)
+      let room = this.rooms.get(roomId)
 
-      // If room doesn't exist locally, try to get treasury info from blockchain
+      // If room doesn't exist locally, try to get room info from blockchain
       if (!room) {
-        console.log("[v0] Room not found locally, checking treasury on blockchain...")
+        console.log("[v0] Room not found locally, checking room on blockchain...")
         
-        const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
-        if (!treasuryInfo) {
-          throw new Error(`Treasury ${treasuryId} not found. Invalid room code.`)
+        const roomInfo = await suiContract.getRoomInfo(roomId)
+        if (!roomInfo) {
+          throw new Error(`Room ${roomId} not found. Invalid room ID.`)
         }
 
-        // Create room from treasury info if it doesn't exist locally
+        // Create room from blockchain room info if it doesn't exist locally
         room = {
-          treasuryId,
-          betAmount: treasuryInfo.betAmount,
-          creator: "unknown", // We don't know the creator from treasury info
-          players: [], // We'll add the joining player
-          currentPlayer: "",
+          roomId,
+          betAmount: betAmount, // Use the joining player's bet amount
+          creator: roomInfo.player1, // player1 is the creator
+          players: roomInfo.player2 ? [roomInfo.player1, roomInfo.player2] : [roomInfo.player1],
+          currentPlayer: roomInfo.player1,
           board: Array(9).fill(null),
-          gameState: "waiting",
+          gameState: roomInfo.isFull ? "playing" : "waiting",
           createdAt: Date.now(),
         }
         
-        console.log("[v0] Created room from treasury info:", treasuryInfo)
+        console.log("[v0] Created room from blockchain info:", roomInfo)
       }
 
       // Validate room state
@@ -235,15 +214,15 @@ class SimpleRoomManager {
         console.log("[v0] Player is already in room, returning existing room:", playerAddress)
         
         // Update room state and notify listeners to ensure sync
-        this.rooms.set(treasuryId, room)
+        this.rooms.set(roomId, room)
         this.saveRoomsToStorage()
-        this.notifyListeners(treasuryId, room)
+        this.notifyListeners(roomId, room)
         
         return room
       }
 
       // Call the blockchain contract to join the room
-      const result = await suiContract.joinRoom(treasuryId, betAmount, signAndExecute)
+      const result = await suiContract.joinRoom(roomId, betAmount, signAndExecute)
       
       console.log("[v0] Join transaction successful:", result)
 
@@ -257,16 +236,16 @@ class SimpleRoomManager {
         console.log("[v0] Room is full, starting game automatically")
         
         // Update the room immediately and broadcast the state change
-        this.rooms.set(treasuryId, room)
+        this.rooms.set(roomId, room)
         this.saveRoomsToStorage()
-        this.notifyListeners(treasuryId, room)
+        this.notifyListeners(roomId, room)
         
         console.log("[v0] Game started! Broadcasting room state to all players")
       } else {
         // Update the room for single player case
-        this.rooms.set(treasuryId, room)
+        this.rooms.set(roomId, room)
         this.saveRoomsToStorage()
-        this.notifyListeners(treasuryId, room)
+        this.notifyListeners(roomId, room)
       }
 
       console.log("[v0] Player joined successfully, room updated:", room)
@@ -282,10 +261,10 @@ class SimpleRoomManager {
    * Enter an existing room (for creators who want to enter their own room)
    * This method handles creators accessing their own rooms without needing blockchain transactions
    */
-  enterRoom(treasuryId: string, playerAddress: string): SimpleRoom | null {
-    const room = this.rooms.get(treasuryId)
+  enterRoom(roomId: string, playerAddress: string): SimpleRoom | null {
+    const room = this.rooms.get(roomId)
     if (!room) {
-      console.error("[v0] Room not found:", treasuryId)
+      console.error("[v0] Room not found:", roomId)
       return null
     }
 
@@ -297,9 +276,9 @@ class SimpleRoomManager {
     console.log("[v0] Player entering room:", playerAddress)
     
     // Update room state and notify listeners to ensure real-time updates
-    this.rooms.set(treasuryId, room)
+    this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
-    this.notifyListeners(treasuryId, room)
+    this.notifyListeners(roomId, room)
     
     return room
   }
@@ -307,8 +286,8 @@ class SimpleRoomManager {
   /**
    * Make a move in the game
    */
-  makeMove(treasuryId: string, position: number, player: string): SimpleRoom | null {
-    const room = this.rooms.get(treasuryId)
+  makeMove(roomId: string, position: number, player: string): SimpleRoom | null {
+    const room = this.rooms.get(roomId)
     if (!room || room.gameState !== "playing" || room.currentPlayer !== player) {
       return null
     }
@@ -331,9 +310,9 @@ class SimpleRoomManager {
       }
     }
 
-    this.rooms.set(treasuryId, room)
+    this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
-    this.notifyListeners(treasuryId, room)
+    this.notifyListeners(roomId, room)
     
     return room
   }
@@ -341,8 +320,8 @@ class SimpleRoomManager {
   /**
    * Finish the game and distribute prizes
    */
-  async finishGame(treasuryId: string, winner: string | null, signAndExecute: any): Promise<void> {
-    const room = this.rooms.get(treasuryId)
+  async finishGame(roomId: string, winner: string | null, signAndExecute: any): Promise<void> {
+    const room = this.rooms.get(roomId)
     if (!room) return
 
     console.log("[v0] Finishing game and distributing prize")
@@ -350,7 +329,8 @@ class SimpleRoomManager {
     if (winner) {
       try {
         // Execute blockchain transaction to finish the game and distribute prizes
-        const result = await suiContract.finishGame(treasuryId, winner, signAndExecute)
+        // Note: This may need to be updated based on the actual Room contract implementation
+        const result = await suiContract.finishGame(roomId, winner, signAndExecute)
         
         console.log("[v0] Finish game transaction successful:", result)
         room.winner = winner
@@ -361,46 +341,46 @@ class SimpleRoomManager {
       }
     }
 
-    this.rooms.set(treasuryId, room)
+    this.rooms.set(roomId, room)
     this.saveRoomsToStorage()
-    this.notifyListeners(treasuryId, room)
+    this.notifyListeners(roomId, room)
   }
 
   /**
-   * Get room by treasury ID, with fallback to blockchain lookup
+   * Get room by room ID, with fallback to blockchain lookup
    */
-  async getOrLoadRoom(treasuryId: string): Promise<SimpleRoom | null> {
+  async getOrLoadRoom(roomId: string): Promise<SimpleRoom | null> {
     // First try local storage
-    let room = this.rooms.get(treasuryId)
+    let room = this.rooms.get(roomId)
     
     if (room) {
       return room
     }
     
     // If not found locally, try to load from blockchain
-    console.log("[v0] Room not found locally, attempting to load from blockchain:", treasuryId)
+    console.log("[v0] Room not found locally, attempting to load from blockchain:", roomId)
     
     try {
-      const treasuryInfo = await suiContract.getTreasuryInfo(treasuryId)
-      if (!treasuryInfo) {
-        console.log("[v0] Treasury not found on blockchain:", treasuryId)
+      const roomInfo = await suiContract.getRoomInfo(roomId)
+      if (!roomInfo) {
+        console.log("[v0] Room not found on blockchain:", roomId)
         return null
       }
       
-      // Create room from treasury info
+      // Create room from room info
       room = {
-        treasuryId,
-        betAmount: treasuryInfo.betAmount,
-        creator: "unknown", // We don't know the creator from treasury info alone
-        players: [], // This will be populated based on who's accessing
-        currentPlayer: "",
+        roomId,
+        betAmount: 0.1, // Default bet amount since Room struct doesn't store this
+        creator: roomInfo.player1, // player1 is the creator
+        players: roomInfo.player2 ? [roomInfo.player1, roomInfo.player2] : [roomInfo.player1],
+        currentPlayer: roomInfo.player1,
         board: Array(9).fill(null),
-        gameState: "waiting",
+        gameState: roomInfo.isFull ? "playing" : "waiting",
         createdAt: Date.now(),
       }
       
       // Store it locally for future access
-      this.rooms.set(treasuryId, room)
+      this.rooms.set(roomId, room)
       this.saveRoomsToStorage()
       
       console.log("[v0] Room loaded from blockchain and cached locally:", room)
@@ -413,23 +393,23 @@ class SimpleRoomManager {
   }
 
   /**
-   * Get room by treasury ID
+   * Get room by room ID
    */
-  getRoom(treasuryId: string): SimpleRoom | undefined {
-    return this.rooms.get(treasuryId)
+  getRoom(roomId: string): SimpleRoom | undefined {
+    return this.rooms.get(roomId)
   }
 
   /**
    * Subscribe to room updates
    */
-  subscribeToRoom(treasuryId: string, callback: (room: SimpleRoom) => void): () => void {
-    if (!this.listeners.has(treasuryId)) {
-      this.listeners.set(treasuryId, [])
+  subscribeToRoom(roomId: string, callback: (room: SimpleRoom) => void): () => void {
+    if (!this.listeners.has(roomId)) {
+      this.listeners.set(roomId, [])
     }
-    this.listeners.get(treasuryId)!.push(callback)
+    this.listeners.get(roomId)!.push(callback)
 
     return () => {
-      const callbacks = this.listeners.get(treasuryId)
+      const callbacks = this.listeners.get(roomId)
       if (callbacks) {
         const index = callbacks.indexOf(callback)
         if (index > -1) callbacks.splice(index, 1)
@@ -437,12 +417,12 @@ class SimpleRoomManager {
     }
   }
 
-  private notifyListeners(treasuryId: string, room: SimpleRoom): void {
-    const callbacks = this.listeners.get(treasuryId) || []
+  private notifyListeners(roomId: string, room: SimpleRoom): void {
+    const callbacks = this.listeners.get(roomId) || []
     callbacks.forEach((callback) => callback(room))
     
     // Also broadcast via WebSocket API for real-time sync
-    this.broadcastRoomUpdate(treasuryId, room)
+    this.broadcastRoomUpdate(roomId, room)
   }
 
   /**
@@ -464,6 +444,47 @@ class SimpleRoomManager {
     } catch (error) {
       console.warn('[v0] Failed to broadcast room update via SSE:', error)
       // Don't throw error - local updates should still work
+    }
+  }
+
+  /**
+   * List all available rooms from the blockchain
+   */
+  async listAvailableRooms(): Promise<SimpleRoom[]> {
+    try {
+      console.log("[v0] Fetching available rooms from blockchain...")
+      
+      const blockchainRooms = await suiContract.listRooms()
+      const availableRooms: SimpleRoom[] = []
+      
+      for (const roomInfo of blockchainRooms) {
+        // Convert blockchain room info to SimpleRoom format
+        const room: SimpleRoom = {
+          roomId: roomInfo.id!,
+          betAmount: 0.1, // Default bet amount since Room struct doesn't store this
+          creator: roomInfo.player1,
+          players: roomInfo.player2 ? [roomInfo.player1, roomInfo.player2] : [roomInfo.player1],
+          currentPlayer: roomInfo.player1,
+          board: Array(9).fill(null),
+          gameState: roomInfo.isFull ? "playing" : "waiting",
+          createdAt: Date.now(),
+        }
+        
+        // Cache the room locally
+        this.rooms.set(room.roomId, room)
+        availableRooms.push(room)
+      }
+      
+      // Save to local storage
+      this.saveRoomsToStorage()
+      
+      console.log(`[v0] Found ${availableRooms.length} available rooms`)
+      return availableRooms
+      
+    } catch (error) {
+      console.error("[v0] Failed to list available rooms:", error)
+      // Return locally cached rooms as fallback
+      return Array.from(this.rooms.values())
     }
   }
 
