@@ -81,11 +81,11 @@ class SimpleRoomManager {
           change.objectType.includes("Room")
         )
         
-        // Strategy 2: Look for objects from the game module 
+        // Strategy 2: Look for objects from the twoproom module 
         if (!roomObject) {
           roomObject = result.objectChanges.find(
             (change: any) => change.type === "created" && change.objectType && 
-            change.objectType.includes("::game::")
+            change.objectType.includes("::twoproom::")
           )
         }
         

@@ -77,11 +77,11 @@ export class SuiGameContract {
       // Call the create_room function from the new Sui Move contract
       // This creates a Room object with the caller as player1
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::game::create_room`,
+        target: `${CONTRACT_PACKAGE_ID}::twoproom::create_room`,
         arguments: [],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::game::create_room`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::twoproom::create_room`)
 
       // Execute the transaction using the modern dapp-kit pattern
       // The signAndExecuteTransaction is a mutate function that returns a promise
@@ -145,11 +145,11 @@ export class SuiGameContract {
       // Call the join_room function from the new Sui Move contract
       // This adds the caller as player2 to the existing Room object
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::game::join_room`,
+        target: `${CONTRACT_PACKAGE_ID}::twoproom::join_room`,
         arguments: [tx.object(roomId)],
       })
 
-      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::game::join_room with room ${roomId}`)
+      console.log(`[v0] Transaction prepared, calling smart contract: ${CONTRACT_PACKAGE_ID}::twoproom::join_room with room ${roomId}`)
 
       // Execute the transaction using the modern dapp-kit pattern
       return new Promise((resolve, reject) => {
@@ -202,7 +202,7 @@ export class SuiGameContract {
 
       // Call the move function with correct arguments order: winner_address first, then treasury
       tx.moveCall({
-        target: `${CONTRACT_PACKAGE_ID}::bet::finish_game`,
+        target: `${CONTRACT_PACKAGE_ID}::main::finish_game`,
         arguments: [tx.pure.address(winnerAddress), tx.object(treasuryId)],
       })
 
@@ -242,7 +242,7 @@ export class SuiGameContract {
       console.log("[v0] Querying all Room objects from blockchain...")
       
       // Query all objects of the Room type
-      const roomType = `${CONTRACT_PACKAGE_ID}::game::Room`
+      const roomType = `${CONTRACT_PACKAGE_ID}::twoproom::Room`
       
       const response = await this.client.getOwnedObjects({
         filter: {
@@ -345,7 +345,7 @@ export class SuiGameContract {
         console.log(`[v0] Analyzing object changes for room:`, JSON.stringify(transaction.objectChanges, null, 2))
         
         // Look for created Room objects
-        const roomType = `${CONTRACT_PACKAGE_ID}::game::Room`
+        const roomType = `${CONTRACT_PACKAGE_ID}::twoproom::Room`
         
         // Strategy 1: Look for objects with exact Room type
         let roomObject = transaction.objectChanges.find(
@@ -365,7 +365,7 @@ export class SuiGameContract {
         if (!roomObject) {
           roomObject = transaction.objectChanges.find(
             (change: any) => change.type === "created" && change.objectId && 
-            change.objectType && change.objectType.includes("::game::")
+            change.objectType && change.objectType.includes("::twoproom::")
           )
         }
         
